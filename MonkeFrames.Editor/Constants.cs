@@ -12,8 +12,8 @@ public static class Constants
 {
     public const string Name = "MonkeFrames";
     public const string Guid = "bingus.monkeframes";
-    public const string Version = "1.2";
-    public static readonly string VersionID = $"{Version}";
+    public const string Version = "1.3";
+    public static readonly string VersionID = $"{Version} Beta 1";
 
     public static string BuildDate
     {
@@ -46,6 +46,7 @@ public static class Constants
     {
         {"SirKingBinx", "Developer" },
         {"uhJames", "Developer" },
+        {"YourBoiAlex", "Developer" },
         {"", "" },
         {"MrNubbaWubington", "Tester" },
         {"nebwella", "Tester" },
