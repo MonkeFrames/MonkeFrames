@@ -14,6 +14,21 @@ public class Settings
     public Color AccentColor = Color.blue;
     public bool Autosave = true;
 
+    /// <summary>Play UI transitions (window open/close, menus, hovers).</summary>
+    public bool Animations = true;
+
+    /// <summary>Multiplier for UI animation speed (0.5 = slower, 2 = faster).</summary>
+    public float AnimationSpeed = 1f;
+
+    /// <summary>New keyframes use the Smooth transition instead of Linear.</summary>
+    public bool SmoothByDefault = false;
+
+    /// <summary>Smooth (cinematic) mouse look. Toggled with Caps Lock.</summary>
+    public bool SmoothMouseLook = false;
+
+    /// <summary>How much mouse look is smoothed, 0 (light) to 1 (heavy, very floaty).</summary>
+    public float MouseSmoothing = 0.5f;
+
     public static void Load()
     {
         var settings = new JsonSerializerSettings
@@ -28,7 +43,7 @@ public class Settings
         }
 
         string prefs = File.ReadAllText(SystemUtilities.Combine(Constants.DataFolder, "config.json"));
-        current = JsonConvert.DeserializeObject<Settings>(prefs, settings);
+        current = JsonConvert.DeserializeObject<Settings>(prefs, settings) ?? new Settings();
     }
 
     public static void Save()

@@ -1,6 +1,7 @@
 using System;
 using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
+using MonkeFrames.Editor.UI;
 using UnityEngine;
 
 namespace MonkeFrames.Editor.Classes;
@@ -8,7 +9,10 @@ namespace MonkeFrames.Editor.Classes;
 public class IEditorWindowManager
 {
     public static int WindowIDs = 0;
-    public static GUIStyle WindowStyle;
+    public static GUIStyle WindowStyle => Theme.WindowStyle;
+
+    /// <summary>Seconds a window takes to open/close at 1x animation speed.</summary>
+    public const float TransitionTime = 0.24f;
 
     public IEditorWindow Window;
     public Rect WindowPosition;
@@ -16,6 +20,9 @@ public class IEditorWindowManager
 
     public bool Visible = false;
     public bool LastVisible = false;
+
+    /// <summary>Linear 0..1 open progress. Eased when drawn.</summary>
+    public float Progress;
 
     public IEditorWindowManager(IEditorWindow window)
     {
@@ -26,62 +33,129 @@ public class IEditorWindowManager
         WindowID = WindowIDs;
     }
 
+    /// <summary>Advance the open/close transition. Called once per frame from UIManager.Update.</summary>
+    public void Tick(float dt)
+    {
+        float target = Visible ? 1f : 0f;
+        Progress = Mathf.MoveTowards(Progress, target, dt * Anim.Speed / TransitionTime);
+    }
+
+    /// <summary>Eased visibility used for alpha.</summary>
+    private float Alpha => Visible ? Anim.OutCubic(Progress) : Anim.InCubic(Progress) * 0.85f + Progress * 0.15f;
+
+    /// <summary>Eased scale: pops in with a little overshoot, shrinks slightly when closing.</summary>
+    private float Scale => Visible
+        ? Mathf.LerpUnclamped(0.9f, 1f, Anim.OutBack(Progress))
+        : Mathf.Lerp(0.95f, 1f, Anim.OutCubic(Progress));
+
     private void CreateWindow(int windowId)
     {
-        // Window Creation ( done in Draw() )
+        // Window layout
         //  _________________________________
-        // |  [>|] Window Name           [X] | <-- Topbar (done here)
-        // |                                 |   <
-        // |          hello world!           |   <
-        // |                                 |   <
-        // |                                 |   <
-        // |                                 |   <
-        // |                                 |   <   Content (done in Window.OnDraw() )
-        // |                                 |   <
-        // |                                 |   <
-        // |                                 |   <
-        // |                                 |   <
-        // |_________________________________|   <
+        // | [icon] Window Name          [×] | <-- title bar (drawn here)
+        // |=====accent line (animates)======|
+        // |                                 |
+        // |     content (Window.OnDraw)     |
+        // |_________________________________|
 
-        GUI.DrawTexture(new Rect(5, 5, 20, 20), UIManager.Instance.Icon);
-        GUI.Label(new Rect(30, 5, WindowPosition.width - 60, 20), Window.Name);
+        GUI.color = new Color(1, 1, 1, Alpha);
 
-        if (GUI.Button(new Rect(WindowPosition.width - 25, 5, 20, 20), "X"))
+        // Swallow input while the window is fading out so nothing is clicked by accident.
+        if (!Visible && (Event.current.isMouse || Event.current.isKey))
+            Event.current.Use();
+
+        float w = WindowPosition.width;
+        bool focused = UIManager.Instance.FocusedWindow == WindowID;
+
+        // Title bar
+        GUI.DrawTexture(new Rect(10, 7, 16, 16), UIManager.Instance.Icon);
+        Theme.DrawText(new Rect(32, 5, w - 70, 20), Window.Name, Theme.Title, focused ? Theme.Text : Theme.TextMuted);
+
+        // Accent line grows out from the centre as the window opens
+        float line = Anim.OutCubic(Progress);
+        Theme.Fill(new Rect(0, Theme.TitleHeight - 2, w, 1), Theme.Border, 0);
+        float lw = (w - 24) * line * (focused ? 1f : 0.35f);
+        Theme.Fill(new Rect(w / 2f - lw / 2f, Theme.TitleHeight - 2.5f, lw, 2), Theme.Accent.WithAlpha(focused ? 0.9f : 0.5f), 1);
+
+        // Close button (red hover fade)
+        Rect close = new Rect(w - 28, 5, 20, 20);
+        float ch = Anim.To("win.close." + WindowID, close.Contains(Event.current.mousePosition) ? 1f : 0f, 20f);
+        if (ch > 0.01f)
+            Theme.Fill(close, Theme.Danger.WithAlpha(0.85f * ch), 10);
+        Theme.DrawText(new Rect(close.x, close.y - 1, close.width, close.height), "×", Theme.LabelCenter,
+            Color.Lerp(Theme.TextMuted, Color.white, ch));
+
+        if (GUI.Button(close, GUIContent.none, GUIStyle.none))
             Visible = false;
+
+        if (Event.current.type == EventType.MouseDown)
+            UIManager.Instance.FocusedWindow = WindowID;
 
         try
         {
             Window.OnDraw();
-        } catch (Exception ex)
+        }
+        catch (Exception ex)
         {
             Console.WriteLine($"Error drawing window \"{Window.Name}\" ({WindowID}): {ex.Message}");
         }
 
-        GUI.DragWindow(new Rect(0, 0, WindowPosition.width, 30));
+        GUI.DragWindow(new Rect(0, 0, w - 32, Theme.TitleHeight));
     }
 
     public void Draw()
     {
-        WindowStyle ??= GUI.skin.box;
-
-        GUI.backgroundColor = new Color(1, 1, 1, 0.95f);
-
-        if (Visible)
-            WindowPosition = GUI.Window(WindowID, WindowPosition, CreateWindow, GUIContent.none, WindowStyle);
-
-        if (WindowPosition.x >= Screen.width - 20)
-            WindowPosition.x = 0;
-
-        if (WindowPosition.y >= Screen.height - 20)
-            WindowPosition.y = 20;
-
-        if (Visible != LastVisible) {
+        // Fire open/close callbacks *before* drawing so OnDraw never runs un-initialised.
+        if (Visible != LastVisible)
+        {
             if (Visible)
+            {
                 Window.OnOpen();
+                UIManager.Instance.FocusedWindow = WindowID;
+                GUI.BringWindowToFront(WindowID);
+            }
             else
+            {
                 Window.OnClose();
-            
+            }
+
             LastVisible = Visible;
         }
+
+        if (!Visible && Progress <= 0f)
+            return;
+
+        Color prevColor = GUI.color;
+        Color prevBg = GUI.backgroundColor;
+        Matrix4x4 prevMatrix = GUI.matrix;
+
+        float alpha = Alpha;
+        GUI.color = new Color(1, 1, 1, alpha);
+        GUI.backgroundColor = Color.white;
+
+        // Slide up + scale around the window centre while animating.
+        Rect drawRect = WindowPosition;
+        drawRect.y += (1f - Anim.OutCubic(Progress)) * (Visible ? 14f : 6f);
+
+        bool animating = Progress < 1f;
+        if (animating)
+        {
+            float s = Scale;
+            GUIUtility.ScaleAroundPivot(new Vector2(s, s), drawRect.center);
+        }
+
+        Rect result = GUI.Window(WindowID, drawRect, CreateWindow, GUIContent.none, WindowStyle);
+
+        // Only accept drag results once the window is settled (the draw rect is offset while animating).
+        if (!animating && Visible)
+            WindowPosition = result;
+
+        GUI.matrix = prevMatrix;
+        GUI.color = prevColor;
+        GUI.backgroundColor = prevBg;
+
+        // Keep windows reachable on screen.
+        WindowPosition.x = Mathf.Clamp(WindowPosition.x, -WindowPosition.width + 80, Screen.width - 80);
+        WindowPosition.y = Mathf.Clamp(WindowPosition.y, UIManager.MenuBarHeight, Screen.height - 40);
     }
 }

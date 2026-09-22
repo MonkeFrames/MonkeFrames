@@ -24,8 +24,14 @@ namespace MonkeFrames.Editor.Utilities
             if (color == Color.green)
                 return "Green";
 
+            if (color == Color.cyan)
+                return "Cyan";
+
             if (color == Color.blue)
                 return "Blue";
+
+            if (color == Color.magenta)
+                return "Pink";
 
             if (color == Color.purple)
                 return "Purple";

@@ -73,20 +73,15 @@ public class KeyframeManager : MonoBehaviour
         if (CameraManager.Instance.InPlayback)
             return;
 
+        // Don't treat typing in a text field (keyframe values, room codes...) as shortcuts.
+        if (GUIUtility.keyboardControl != 0)
+            return;
+
         if (Keyboard.current.vKey.wasPressedThisFrame)
             CreateKeyframe();
 
-        if (Keyboard.current.fKey.wasPressedThisFrame)
-        {
-            if (UIManager.Instance.Selection == -1)
-                return;
-
-            Keyframe k = Project.Keyframes[UIManager.Instance.Selection];
-            
-            CameraManager.Instance.Position = k.Position;
-            CameraManager.Instance.Rotation = k.QuatRotation;
-            CameraManager.Instance.FieldOfView = k.FieldOfView;
-        }
+        if (Keyboard.current.fKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
+            GoToKeyframe(UIManager.Instance.Selection);
 
         if (Keyboard.current.tKey.wasPressedThisFrame)
             CreateKeyframe(lookAtPlayer: true);
@@ -96,6 +91,20 @@ public class KeyframeManager : MonoBehaviour
 
         if (Keyboard.current.deleteKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
             DeleteKeyframe(UIManager.Instance.Selection);
+    }
+
+    /// <summary>Move the camera to a keyframe's position, rotation and FOV.</summary>
+    public void GoToKeyframe(int index)
+    {
+        if (index < 0 || index >= Project.Keyframes.Count)
+            return;
+
+        Keyframe k = Project.Keyframes[index];
+
+        CameraManager.Instance.CancelLookSmoothing();
+        CameraManager.Instance.Position = k.Position;
+        CameraManager.Instance.Rotation = k.QuatRotation;
+        CameraManager.Instance.FieldOfView = k.FieldOfView;
     }
 
     public void LoadProject(Project p)
@@ -143,6 +152,9 @@ public class KeyframeManager : MonoBehaviour
         k.Rotation = new Vector3(MathF.Round(k.Rotation.x, 2), MathF.Round(k.Rotation.y, 2), MathF.Round(k.Rotation.z, 2));
 
         k.Transition.Duration = 5f;
+
+        if (Settings.current?.SmoothByDefault == true)
+            k.Transition.Effect = TransitionEffect.Smooth;
 
         if (replaceKeyframeIdx != -1)
         {

@@ -22,7 +22,7 @@ public class GoMenu : IEditorMenu
         CameraManager.Instance.Rotation = Quaternion.Euler(headRot);
     }
 
-    [EditorMenuItem("To Selected Keyframe")]
+    [EditorMenuItem("To Selected Keyframe", Shortcut = "F")]
     public void ToSelectedKeyframe()
     {
         if (UIManager.Instance.Selection == -1)

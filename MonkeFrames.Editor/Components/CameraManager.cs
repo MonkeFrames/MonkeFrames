@@ -1,4 +1,5 @@
 using GorillaNetworking;
+using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Utilities;
 using System;
 using System.Collections;
@@ -131,13 +132,7 @@ public class CameraManager : MonoBehaviour
             FieldOfView += Mouse.current.scroll.ReadValue().y * 5; // Increment by 5
             FieldOfView = NumberUtilities.Bounds(FieldOfView, 15, 150);
 
-            Cursor.lockState = Mouse.current.rightButton.isPressed ? CursorLockMode.Locked : CursorLockMode.None;
-
-            if (Mouse.current.rightButton.isPressed)
-            {
-                mousePos += Mouse.current.delta.ReadValue() / 5f;
-                Rotation = Quaternion.Euler(-mousePos.y * 0.5f, mousePos.x * 0.5f, 0f);
-            }
+            UpdateMouseLook();
         }
 
         if (InPlayback && Keyboard.current.spaceKey.wasPressedThisFrame)
@@ -145,6 +140,81 @@ public class CameraManager : MonoBehaviour
     }
 
     Vector2 mousePos = new Vector2(0, 0);
+
+    // ---- Mouse look (with optional Caps Lock smoothing) ----
+    private Vector2 _smoothedLook;
+    private bool _lookSettling;
+
+    /// <summary>True while smoothed mouse look is still gliding to its target.</summary>
+    public bool LookSettling => _lookSettling;
+
+    private void UpdateMouseLook()
+    {
+        Settings settings = Settings.current;
+        bool typing = GUIUtility.keyboardControl != 0;
+
+        if (!typing && Keyboard.current.capsLockKey.wasPressedThisFrame && settings != null)
+        {
+            settings.SmoothMouseLook = !settings.SmoothMouseLook;
+            UIManager.Instance.Status = settings.SmoothMouseLook
+                ? "Smooth mouse look ON (Caps Lock to turn off)"
+                : "Smooth mouse look OFF";
+            Settings.Save();
+        }
+
+        bool rmb = Mouse.current.rightButton.isPressed;
+        Cursor.lockState = rmb ? CursorLockMode.Locked : CursorLockMode.None;
+
+        // Start looking from wherever the camera currently points (e.g. after "Go to keyframe"),
+        // instead of snapping back to the last mouse-look angle.
+        if (Mouse.current.rightButton.wasPressedThisFrame && !_lookSettling)
+        {
+            Vector3 e = Rotation.eulerAngles;
+            float pitch = e.x > 180f ? e.x - 360f : e.x;
+            mousePos = new Vector2(e.y / 0.5f, -pitch / 0.5f);
+            _smoothedLook = mousePos;
+        }
+
+        if (rmb)
+            mousePos += Mouse.current.delta.ReadValue() / 5f;
+
+        bool smooth = settings?.SmoothMouseLook == true;
+
+        if (smooth)
+        {
+            if (rmb)
+                _lookSettling = true;
+
+            if (_lookSettling)
+            {
+                // Critically-damped follow: higher smoothing = lower rate = floatier camera.
+                float amount = Mathf.Clamp01(settings.MouseSmoothing);
+                float rate = Mathf.Lerp(22f, 2.5f, amount);
+                _smoothedLook = Vector2.Lerp(_smoothedLook, mousePos, 1f - Mathf.Exp(-rate * Time.unscaledDeltaTime));
+
+                Rotation = Quaternion.Euler(-_smoothedLook.y * 0.5f, _smoothedLook.x * 0.5f, 0f);
+
+                if (!rmb && (_smoothedLook - mousePos).sqrMagnitude < 0.0004f)
+                    _lookSettling = false;
+            }
+        }
+        else
+        {
+            _lookSettling = false;
+            if (rmb)
+            {
+                _smoothedLook = mousePos;
+                Rotation = Quaternion.Euler(-mousePos.y * 0.5f, mousePos.x * 0.5f, 0f);
+            }
+        }
+    }
+
+    /// <summary>Stop any in-progress look smoothing (used when the camera is moved programmatically).</summary>
+    public void CancelLookSmoothing()
+    {
+        _lookSettling = false;
+        _smoothedLook = mousePos;
+    }
     public bool CinemachineState = true;
 
     public void SetCinemachineState(bool enabled)
@@ -183,6 +253,7 @@ public class CameraManager : MonoBehaviour
 
             if (playbackPosition >= playbackEnding - 1)
             {
+                bool wasRecording = doRecording;
                 InPlayback = false;
                 UIManager.Instance.Drawing = true;
                 KeyframeManager.Instance.RefreshOrbs();
@@ -190,6 +261,13 @@ public class CameraManager : MonoBehaviour
                 doRecording = false;
 
                 StopCoroutine("PlaybackCoroutine");
+
+                // Plain playback (Project > Play) has no encoder to shut down.
+                if (!wasRecording)
+                {
+                    UIManager.Instance.Status = "Playback finished.";
+                    yield break;
+                }
 
                 UIManager.Instance.Status = "Finishing encoding..";
 
@@ -205,6 +283,8 @@ public class CameraManager : MonoBehaviour
                 Destroy(renderTexture);
 
                 Process.Start("explorer.exe", $"/select,\"{outputMp4}\"");
+                UIManager.Instance.Status = $"Exported {outputMp4}";
+                yield break;
             }
 
             Keyframe currentFrame = kCache[playbackPosition];

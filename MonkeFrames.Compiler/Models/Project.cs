@@ -35,13 +35,19 @@ public class Project
     /// </summary>
     public int FPS {
         get => field;
-        set {
-            if (value is 30 or 60 or 120)
-                field = value;
-            else
-                throw new ArgumentException("FPS must be either 30, 60, or 120.", nameof(value));
-        }
+      
+        set => field = value; 
     }
+
+    /// <summary>
+    /// How strongly "Smooth" keyframes carry momentum through each keyframe.
+    /// 0 = ease to a stop at every keyframe, 1 = fully flowing spline (default).
+    /// </summary>
+    public float Smoothness
+    {
+        get => field;
+        set => field = Math.Clamp(value, 0f, 1.5f);
+    } = 1f;
 
     /// <summary>
     /// A list of built keyframes for the project for use with cameras.

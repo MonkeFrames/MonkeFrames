@@ -9,7 +9,7 @@ public class MonkeFramesMenu : IEditorMenu
     public string Name => "MonkeFrames";
     public int Index => 0;
 
-    [EditorMenuItem("Disable/Enable (F1)")]
+    [EditorMenuItem("Disable MonkeFrames", Shortcut = "F1")]
     public void Disable()
     {
         CameraManager.Instance.SetModEnabled(false);
@@ -21,7 +21,7 @@ public class MonkeFramesMenu : IEditorMenu
         UIManager.Instance.ToggleWindow("Settings");
     }
 
-    [EditorMenuItem("About MonkeFrames")]
+    [EditorMenuItem("About MonkeFrames", Separator = true)]
     public void About()
     {
         UIManager.Instance.ToggleWindow("About MonkeFrames");

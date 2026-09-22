@@ -21,7 +21,7 @@ public class ProjectMenu : IEditorMenu
         UIManager.Instance.ToggleWindow("Project Settings");
     }
 
-    [EditorMenuItem("Load Project")]
+    [EditorMenuItem("Load Project", Separator = true)]
     public void LoadProject()
     {
         string path = Win32Utilities.OpenFile("Select your project", "MonkeFrames project\0*.frames", SaveUtilities.ProjectDirectory);
@@ -51,7 +51,7 @@ public class ProjectMenu : IEditorMenu
         SaveUtilities.Save();
     }
 
-    [EditorMenuItem("Export to MP4")]
+    [EditorMenuItem("Export to MP4", Separator = true)]
     public void ExportProject()
     {
         KeyframeManager.Instance.Project.Build().Wait();
