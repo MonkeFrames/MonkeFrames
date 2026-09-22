@@ -43,6 +43,9 @@
       <EmbeddedResource Include="Resources/MFiconTitlebar.png">
         <LogicalName>icon</LogicalName>
       </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFintroLogo.png">
+        <LogicalName>introLogo</LogicalName>
+      </EmbeddedResource>
     </ItemGroup>
 
     <ItemGroup>

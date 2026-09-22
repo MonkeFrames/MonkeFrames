@@ -46,6 +46,7 @@ public static class Constants
     {
         {"SirKingBinx", "Developer" },
         {"uhJames", "Developer" },
+        {"YourBoiAlex", "Developer" },
         {"", "" },
         {"MrNubbaWubington", "Tester" },
         {"nebwella", "Tester" },
@@ -78,7 +79,6 @@ public static class Constants
         {"swmb", "Tester" },
         {"tehbaconvr", "Tester" },
         {"Violet", "Tester" },
-        {"YourBoiAlex", "Tester" },
         {"Gobo", "Tester" },
         {"Atlantic", "Tester" },
         {"Cap", "Tester" },

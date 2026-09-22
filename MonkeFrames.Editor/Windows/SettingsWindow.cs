@@ -11,7 +11,7 @@ namespace MonkeFrames.Editor.Windows;
 public class SettingsWindow : IEditorWindow
 {
     public string Name => "Settings";
-    public Rect Rect => new Rect(120, 50, 480, 460);
+    public Rect Rect => new Rect(120, 50, 480, 492);
 
     public List<Color> colors = [
         Color.red,
@@ -45,6 +45,10 @@ public class SettingsWindow : IEditorWindow
 
         Settings.current.Animations = Widgets.Switch("anim", new Rect(x, y, 260, 26), Settings.current.Animations,
             "UI animations", "Smooth window, menu and hover transitions.");
+        y += 32;
+
+        Settings.current.ShowIntro = Widgets.Switch("intro", new Rect(x, y, w - x * 2, 26), Settings.current.ShowIntro,
+            "Intro on startup", "Play the animated MonkeFrames logo when the mod loads.");
         y += 32;
 
         GUI.enabled = Settings.current.Animations;

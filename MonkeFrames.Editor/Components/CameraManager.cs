@@ -228,6 +228,7 @@ public class CameraManager : MonoBehaviour
     }
 
     int playbackPosition = 0;
+    float playbackAccumulator = 0f;
     int playbackEnding;
 
     public bool doRecording = false;
@@ -313,8 +314,22 @@ public class CameraManager : MonoBehaviour
                 Console.WriteLine($"Ffmpeg encode ... Flush frame {playbackPosition + 1}");
             }
             
-            playbackPosition++;
-            yield return new WaitForSeconds(doRecording ? 0f : (1f / KeyframeManager.Instance.Project.FPS));
+            if (doRecording)
+            {
+                // Recording captures every compiled frame; ffmpeg timestamps them at the project FPS.
+                playbackPosition++;
+                yield return null;
+            }
+            else
+            {
+                // Live playback follows real time, skipping frames when the project FPS (e.g. 240/360)
+                // is higher than the game's own frame rate, so it always plays at the right speed.
+                yield return null;
+                playbackAccumulator += Time.unscaledDeltaTime * KeyframeManager.Instance.Project.FPS;
+                int step = Mathf.FloorToInt(playbackAccumulator);
+                playbackAccumulator -= step;
+                playbackPosition = Mathf.Min(playbackPosition + step, playbackEnding - 1);
+            }
         }
     }
 
@@ -370,6 +385,7 @@ public class CameraManager : MonoBehaviour
         UIManager.Instance.Drawing = false;
         KeyframeManager.Instance.DeleteOrbs();
         playbackPosition = 0;
+        playbackAccumulator = 0f;
         playbackEnding = KeyframeManager.Instance.Project.CompiledKeyframes.Count;
 
         StartCoroutine("PlaybackCoroutine");
