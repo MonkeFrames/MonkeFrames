@@ -14,6 +14,9 @@ public class Settings
     public Color AccentColor = Color.blue;
     public bool Autosave = true;
 
+    /// <summary>Play the animated logo intro when MonkeFrames loads.</summary>
+    public bool ShowIntro = true;
+
     /// <summary>Play UI transitions (window open/close, menus, hovers).</summary>
     public bool Animations = true;
 

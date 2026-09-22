@@ -79,7 +79,6 @@ public static class Constants
         {"swmb", "Tester" },
         {"tehbaconvr", "Tester" },
         {"Violet", "Tester" },
-        {"YourBoiAlex", "Tester" },
         {"Gobo", "Tester" },
         {"Atlantic", "Tester" },
         {"Cap", "Tester" },

@@ -70,6 +70,24 @@ public class UIManager : MonoBehaviour
         stream.CopyTo(data);
         Icon = UnityUtilities.CreateTexture(data.ToArray());
 
+        // Intro logo (optional: the editor works fine without it)
+        try
+        {
+            using Stream introStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("introLogo");
+            if (introStream != null)
+            {
+                using MemoryStream introData = new MemoryStream();
+                introStream.CopyTo(introData);
+                IntroScreen.Logo = UnityUtilities.CreateTexture(introData.ToArray());
+                IntroScreen.Logo.filterMode = FilterMode.Bilinear;
+                IntroScreen.Logo.wrapMode = TextureWrapMode.Clamp;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MonkeFrames::UIManager] Could not load intro logo: {ex.Message}");
+        }
+
         Console.WriteLine("[MonkeFrames::UIManager] Initializing managers...");
 
         List<Type> windowTypes = Assembly.GetExecutingAssembly().GetLoadableTypes()
@@ -146,6 +164,18 @@ public class UIManager : MonoBehaviour
             || (Event.current.type == EventType.KeyDown && Event.current.keyCode == KeyCode.Escape))
             GUIUtility.keyboardControl = 0;
 
+        if (Settings.current != null && !Settings.current.ShowIntro && IntroScreen.Active)
+            IntroScreen.Skip();
+
+        // While the intro is playing, show only the intro. Once it starts its exit,
+        // the editor draws underneath so it's revealed as the intro fades away.
+        if (IntroScreen.Active && !IntroScreen.Exiting)
+        {
+            IntroScreen.Draw();
+            GUI.skin = prevSkin;
+            return;
+        }
+
         CloseMenuOnOutsideClick();
         DrawMenuBar();
 
@@ -154,6 +184,7 @@ public class UIManager : MonoBehaviour
 
         DrawDropdown();
         DrawStatus();
+        IntroScreen.Draw();
 
         GUI.skin = prevSkin;
     }

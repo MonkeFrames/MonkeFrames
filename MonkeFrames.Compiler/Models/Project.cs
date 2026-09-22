@@ -31,13 +31,22 @@ public class Project
     public List<Keyframe> Keyframes { get; set; }
 
     /// <summary>
-    /// FPS of the project. Can be either 30 or 60.
+    /// FPS of the project. Any of <see cref="SupportedFPS"/> (24 up to 360).
     /// </summary>
     public int FPS {
         get => field;
-      
-        set => field = value; 
+        set {
+            if (Array.IndexOf(SupportedFPS, value) >= 0)
+                field = value;
+            else
+                throw new ArgumentException($"FPS must be one of: {string.Join(", ", SupportedFPS)}.", nameof(value));
+        }
     }
+
+    /// <summary>
+    /// Frame rates a project can use.
+    /// </summary>
+    public static readonly int[] SupportedFPS = [24, 30, 48, 50, 60, 90, 120, 144, 165, 240, 300, 360];
 
     /// <summary>
     /// How strongly "Smooth" keyframes carry momentum through each keyframe.
