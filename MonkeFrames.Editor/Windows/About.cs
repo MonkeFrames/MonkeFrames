@@ -30,7 +30,7 @@ public class About : IEditorWindow
         GUI.DrawTexture(new Rect(28 + ox, 54, 36, 36), UIManager.Instance.Icon);
 
         GUI.Label(new Rect(84 + ox, 46, w - 100, 32), "MonkeFrames", Theme.Big);
-        GUI.Label(new Rect(86 + ox, 76, w - 100, 20), $"Version {Constants.VersionID}  ·  Build {Constants.BuildDate}", Theme.Muted);
+        GUI.Label(new Rect(86 + ox, 76, w - 100, 20), $"Version {Constants.VersionID} · Build {Constants.BuildDate}", Theme.Muted);
         GUI.Label(new Rect(86 + ox, 94, w - 100, 20), "(C) Copyright 2026 SirKingBinx", Theme.MutedSmall);
 
         GUI.color = prev;
@@ -75,7 +75,11 @@ public class About : IEditorWindow
         {
             Process.Start(new ProcessStartInfo
             {
-                FileName = "https://github.com/sirkingbinx/MonkeFrames",
+#if DEBUG
+                FileName = "https://github.com/MonkeFrames/MonkeFrames/tree/dev",
+#else
+                FileName = "https://github.com/MonkeFrames/MonkeFrames",
+#endif
                 UseShellExecute = true
             });
         }
