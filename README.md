@@ -1,6 +1,5 @@
 <h1 id="readme">
   <img src="MonkeFrames.Editor/Resources/MFtitleWhite.png" height=200><br>
-  <img src="https://img.shields.io/github/downloads/sirkingbinx/MonkeFrames/total"/>
 </h1>
 
 MonkeFrames is a keyframe-based camera animator loosely based on the Orion Drift spectator view that allows you to plan out camera movements with transitions for each property.
@@ -8,7 +7,7 @@ MonkeFrames is a keyframe-based camera animator loosely based on the Orion Drift
 Create a keyframe by pressing V. It's properties will show up on the MonkeFrames panel in the top right. You can tweak its transitions, position, and rotation, or replace the currently selected keyframe by pressing X.
 
 ## Installations
-1. Download `MonkeFrames.zip` from the [releases](https://github.com/sirkingbinx/MonkeFrames/releases/latest) page
+1. Download `MonkeFrames.zip` from the [releases](https://github.com/MonkeFrames/MonkeFrames/releases/latest) page
 2. Extract the zip file into `BepInEx/plugins/` folder and launch your game
 
 ## Usage
