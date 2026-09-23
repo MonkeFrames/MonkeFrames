@@ -5,6 +5,7 @@
 			<EmbeddedResource Include="$(IntermediateOutputPath)$(AssemblyName).xml" LogicalName="$(AssemblyName).xml" />
 		</ItemGroup>
 	</Target>
+
 	
 	<Target Name="CopyToBuild" AfterTargets="Build">
 		<Copy SourceFiles="$(TargetPath)" DestinationFiles="$(SolutionDir)Build\latest\$(MSBuildProjectName).dll"/>

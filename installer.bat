@@ -19,7 +19,7 @@ $DisplayName = "MonkeFrames"
 # Inside of the zip, this should be the path to your mod:
 # BepInEx\plugins\ModName\[ModName].dll
 #
-$URL = "https://github.com/MonkeFrames/MonkeFrames/releases/latest/download/MonkeFrames.zip"
+$URL = "https://github.com/sirkingbinx/MonkeFrames/releases/latest/download/MonkeFrames.zip"
 
 # Delete BepInEx/MelonLoader files from any previous installations. Doesn't delete any of the actual folders, just the injection DLL
 # (winhttp.dll for bepinex, version.dll for melonloader)
@@ -207,7 +207,7 @@ Remove-Item $BepInExZipPath
 $local.installing -f $DisplayName
 $ModZipPath = [System.IO.Path]::Combine($GamePath, [System.IO.Path]::GetFileName($URL))
 DownloadFile $URL $ModZipPath
-Expand-Archive -Path $ModZipPath -DestinationPath $GamePath -Force
+Expand-Archive -Path $ModZipPath -DestinationPath [System.IO.Path]::Combine($GamePath, "BepInEx", "plugins", "MonkeFrames") -Force
 Remove-Item $ModZipPath
 
 ####

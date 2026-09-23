@@ -12,8 +12,8 @@ public static class Constants
 {
     public const string Name = "MonkeFrames";
     public const string Guid = "bingus.monkeframes";
-    public const string Version = "1.3";
-    public static readonly string VersionID = $"{Version} Beta 1";
+    public const string Version = "1.2";
+    public static readonly string VersionID = $"{Version}";
 
     public static string BuildDate
     {
@@ -35,7 +35,7 @@ public static class Constants
     {
         DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
 
-        string[] folders = ["projects", "exports", "plugins"];
+        string[] folders = ["projects", "exports"];
         foreach (string folder in folders)
             Directory.CreateDirectory(SystemUtilities.Combine(DataFolder, folder));
 
@@ -47,7 +47,6 @@ public static class Constants
         {"SirKingBinx", "Developer" },
         {"uhJames", "Developer" },
         {"YourBoiAlex", "Developer" },
-        {"Olibobs", "Developer" },
         {"", "" },
         {"MrNubbaWubington", "Tester" },
         {"nebwella", "Tester" },

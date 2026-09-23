@@ -12,7 +12,7 @@ namespace MonkeFrames.Editor.Windows;
 public class KeyframeEditor : IEditorWindow
 {
     public string Name => "Keyframe Editor";
-    public Rect Rect => new Rect(Screen.width - 620, 50, 600, 770);
+    public Rect Rect => new Rect(Screen.width - 620, 40, 600, 804);
 
     public Compiler.Models.Project Project => KeyframeManager.Instance.Project;
     public Vector2 KeyframeListScrollPos;
@@ -160,7 +160,7 @@ public class KeyframeEditor : IEditorWindow
 
             Theme.DrawText(new Rect(row.x + 44, row.y + 3, 200, 20), $"Keyframe {i + 1}", Theme.Title, Theme.Text);
             Theme.DrawText(new Rect(row.x + 44, row.y + 19, row.width - 200, 18),
-                $"pos {Vec(k.Position)}   rot {Vec(k.Rotation)}   fov {k.FieldOfView:0}", Theme.MutedSmall, Theme.TextMuted);
+                $"pos {Vec(k.Position)}   rot {Vec(k.Rotation)}   fov {k.FieldOfView:0}{(k.MotionBlur ? "   blur" : "")}", Theme.MutedSmall, Theme.TextMuted);
 
             // Effect chip + duration
             string effect = EffectNames[System.Array.IndexOf(EffectOrder, k.Transition.Effect) is int ix and >= 0 ? ix : 0];
@@ -214,7 +214,29 @@ public class KeyframeEditor : IEditorWindow
         GUI.Label(new Rect(x, y, labelW, 24), "FOV");
         k.FieldOfView = Widgets.Slider("fov", new Rect(x + labelW, y, innerW - labelW - 90, 24), k.FieldOfView, 20f, 130f);
         k.FieldOfView = Widgets.FloatField("fov", new Rect(x + innerW - 80, y, 80, 24), "°", Theme.TextMuted, k.FieldOfView);
-        y += 36;
+        y += 32;
+
+        // Motion blur: switch + strength, plus a quick "apply to all"
+        k.MotionBlur = Widgets.Switch("kf.blur", new Rect(x, y, 150, 26), k.MotionBlur, "Motion blur",
+            "Blur the camera while it moves from this keyframe to the next (preview, playback and MP4 export).");
+        GUI.enabled = k.MotionBlur;
+        k.MotionBlurStrength = Widgets.Slider("kf.blurstr", new Rect(x + 160, y, innerW - 160 - 150, 26), k.MotionBlurStrength, 0f, 1f);
+        GUI.Label(new Rect(x + innerW - 144, y, 50, 26), $"{k.MotionBlurStrength * 100f:0}%", Theme.LabelRight);
+        GUI.enabled = true;
+        if (GUI.Button(new Rect(x + innerW - 86, y, 86, 26), new GUIContent("All", "Copy this keyframe's motion blur setting to every keyframe.")))
+        {
+            for (int i = 0; i < Project.Keyframes.Count; i++)
+            {
+                Keyframe other = Project.Keyframes[i];
+                other.MotionBlur = k.MotionBlur;
+                other.MotionBlurStrength = k.MotionBlurStrength;
+                Project.Keyframes[i] = other;
+            }
+            UIManager.Instance.Status = k.MotionBlur
+                ? $"Motion blur ({k.MotionBlurStrength * 100f:0}%) turned on for all {Project.Keyframes.Count} keyframes."
+                : "Motion blur turned off for all keyframes.";
+        }
+        y += 38;
 
         Widgets.Divider(x, y - 6, innerW);
 

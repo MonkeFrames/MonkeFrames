@@ -11,7 +11,7 @@ namespace MonkeFrames.Editor.Windows;
 public class SettingsWindow : IEditorWindow
 {
     public string Name => "Settings";
-    public Rect Rect => new Rect(120, 50, 480, 492);
+    public Rect Rect => new Rect(120, 50, 480, 560);
 
     public List<Color> colors = [
         Color.red,
@@ -51,6 +51,23 @@ public class SettingsWindow : IEditorWindow
             "Intro on startup", "Play the animated MonkeFrames logo when the mod loads.");
         y += 32;
 
+        bool soundWas = Settings.current.NotificationSound;
+        Settings.current.NotificationSound = Widgets.Switch("notifsound", new Rect(x, y, w - x * 2, 26), Settings.current.NotificationSound,
+            "Notification sound", "Play a soft chime when a notification pops up.");
+        if (Settings.current.NotificationSound && !soundWas)
+            NotificationSound.Play(force: true);
+        y += 32;
+
+        GUI.enabled = Settings.current.NotificationSound;
+        GUI.Label(new Rect(x, y, 120, 24), new GUIContent("Sound volume", "How loud the notification chime is."));
+        Settings.current.NotificationVolume = Widgets.Slider("notifvol", new Rect(x + 120, y, w - x * 2 - 234, 24),
+            Settings.current.NotificationVolume, 0f, 1f);
+        GUI.Label(new Rect(w - x - 108, y, 40, 24), $"{Settings.current.NotificationVolume * 100f:0}%", Theme.LabelRight);
+        if (GUI.Button(new Rect(w - x - 62, y, 62, 24), "Test"))
+            NotificationSound.Play(force: true);
+        GUI.enabled = true;
+        y += 34;
+
         GUI.enabled = Settings.current.Animations;
         GUI.Label(new Rect(x, y, 120, 24), new GUIContent("Animation speed", "How quickly transitions play."));
         Settings.current.AnimationSpeed = Widgets.Slider("animspeed", new Rect(x + 120, y, w - x * 2 - 170, 24),
@@ -80,7 +97,7 @@ public class SettingsWindow : IEditorWindow
         y += 24;
 
         Settings.current.SmoothMouseLook = Widgets.Switch("smoothlook", new Rect(x, y, w - x * 2 - 90, 26), Settings.current.SmoothMouseLook,
-            "Smooth mouse look", "Cinematic, floaty right-click look. Press Caps Lock at any time to toggle it.");
+            "Smooth mouse look", "Cinematic, floaty mouse look (left-drag) and tilt (right-drag). Press Caps Lock at any time to toggle it.");
         Rect key = new Rect(w - x - 80, y + 3, 80, 20);
         Theme.Fill(key, new Color(1, 1, 1, 0.08f), 5);
         Theme.DrawText(key, "Caps Lock", Theme.LabelCenterSmall, Theme.Text);

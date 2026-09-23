@@ -5,10 +5,4 @@
         <GameAssemblyPath>$(GamePath)\Gorilla Tag_Data\Managed</GameAssemblyPath>
         <DependenciesPath>$(SolutionDir)\Build\Dependencies</DependenciesPath>
     </PropertyGroup>
-
-    <PropertyGroup Condition="'$(CI)'=='TRUE'">
-        <GamePath>$(SolutionDir)Libs</GamePath>
-        <GameAssemblyPath>$(SolutionDir)Libs</GameAssemblyPath>
-        <DependenciesPath>$(SolutionDir)\Build\Dependencies</DependenciesPath>
-    </PropertyGroup>
 </Project>

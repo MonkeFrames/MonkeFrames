@@ -118,6 +118,28 @@ public class UIManager : MonoBehaviour
         Plugin.OnMonkeFramesLoaded.Invoke();
     }
 
+    /// <summary>True when the mouse is over the menu bar, an open dropdown or any open MonkeFrames window.</summary>
+    public bool IsPointerOverUI
+    {
+        get
+        {
+            if (!Drawing || UnityEngine.InputSystem.Mouse.current == null)
+                return false;
+
+            Vector2 p = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
+            Vector2 gui = new Vector2(p.x, Screen.height - p.y);
+
+            if (gui.y <= MenuBarHeight || _dropdownRect.Contains(gui))
+                return true;
+
+            foreach (IEditorWindowManager w in Windows)
+                if (w.Visible && w.WindowPosition.Contains(gui))
+                    return true;
+
+            return false;
+        }
+    }
+
     public void OpenWindow(string menuName)
     {
         Windows.First(w => w.Window.Name == menuName).Visible = true;
@@ -334,6 +356,7 @@ public class UIManager : MonoBehaviour
             _statusPending = false;
             _statusTime = Time.unscaledTime;
             Anim.Set("status.pop", 0f);
+            NotificationSound.Play();
         }
 
         float holdTime = 4f + _status.Length * 0.03f;

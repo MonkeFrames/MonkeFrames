@@ -112,6 +112,7 @@ public class Player : IEditorWindow
         else if (!IsPlaying)
         {
             _frameAccumulator = 0f;
+            CameraManager.Instance.Blur.Set(false, 0f);
         }
 
         _LastHeadPosition = HeadPosition;
@@ -133,6 +134,11 @@ public class Player : IEditorWindow
                 h = h * 31 + k.FieldOfView.GetHashCode();
                 h = h * 31 + (int)k.Transition.Effect;
                 h = h * 31 + k.Transition.Duration.GetHashCode();
+                h = h * 31 + (k.MotionBlur ? 1 : 0);
+                h = h * 31 + k.MotionBlurStrength.GetHashCode();
+                h = h * 31 + k.Transition.CurveX1.GetHashCode() ^ k.Transition.CurveY1.GetHashCode();
+                h = h * 31 + k.Transition.CurveX2.GetHashCode() ^ k.Transition.CurveY2.GetHashCode();
+                h = h * 31 + (k.Transition.CustomSpeed ? 1 : 0);
             }
             return h;
         }
@@ -141,9 +147,18 @@ public class Player : IEditorWindow
     private void ApplyFrame()
     {
         var f = Project.CompiledKeyframes[HeadPosition];
+
+        // Motion blur only makes sense while the camera is actually moving (playing), not when scrubbing a still frame.
+        CameraManager.Instance.Blur.Set(IsPlaying && f.MotionBlur, f.MotionBlurStrength);
         CameraManager.Instance.Position = f.Position;
         CameraManager.Instance.Rotation = f.QuatRotation;
         CameraManager.Instance.FieldOfView = f.FieldOfView;
+    }
+
+    public void OnClose()
+    {
+        IsPlaying = false;
+        CameraManager.Instance.Blur.Set(false, 0f);
     }
 
     public void OnOpen()

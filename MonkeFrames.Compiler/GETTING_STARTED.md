@@ -2,13 +2,8 @@
 By viewing this file, I'm sure that you have heard somewhere that "developers can add MonkeFrames to their own mods" and you want to do that. This quick start guide will explain how to add keyframing into your own camera mods without much hassle.
 
 ## Add the Compiler
-### Method 1: NuGet
-For those unfamiliar, NuGet is the package manager that powers .NET applications. MonkeFrames is avaliable on NuGet for simple installation and usage.
-
-Run `dotnet package add MonkeFrames.Compiler` in a terminal which has access to your project and you're all set.
-
-### Method 2: Simple Reference
-The second easiest method to include the compiler is [add the DLL file to your references](https://learn.microsoft.com/en-us/visualstudio/ide/how-to-add-or-remove-references-by-using-the-reference-manager?view=visualstudio#add-a-reference) and then copy the compiler DLL in the same folder as your plugin, simular to this:
+### Method 1: Simple Reference
+The easiest method to include the compiler is [add the DLL file to your references](https://learn.microsoft.com/en-us/visualstudio/ide/how-to-add-or-remove-references-by-using-the-reference-manager?view=visualstudio#add-a-reference) and then copy the compiler DLL in the same folder as your plugin, simular to this:
 ```
 Assume your plugin has a folder named MyCoolCameraMod that contains it's files. Include the compiler like this:
 
@@ -16,7 +11,7 @@ BepInEx/plugins/MyCoolCameraMod/MyCoolCameraMod.dll
 BepInEx/plugins/MyCoolCameraMod/MonkeFrames.Compiler.dll
 ```
 
-### Method 3: Extract & Load
+### Method 2: Extract & Load
 You can include the compiler as a resource in your `csproj` and then load it during initialization. This is a janky solution but leads to one single DLL, so would be more preferred if you want an all-in-one mod.
 
 Add the DLL as an embedded resource, reference a copy of it in your source code, and then add this code snippet for loading the compiler:

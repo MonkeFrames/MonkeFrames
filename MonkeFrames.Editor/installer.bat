@@ -19,7 +19,7 @@ $DisplayName = "MonkeFrames"
 # Inside of the zip, this should be the path to your mod:
 # BepInEx\plugins\ModName\[ModName].dll
 #
-$URL = "https://github.com/MonkeFrames/MonkeFrames/releases/latest/download/MonkeFrames.zip"
+$URL = "https://github.com/sirkingbinx/MonkeFrames/releases/latest/download/MonkeFrames.BepInEx.zip"
 
 # Delete BepInEx/MelonLoader files from any previous installations. Doesn't delete any of the actual folders, just the injection DLL
 # (winhttp.dll for bepinex, version.dll for melonloader)

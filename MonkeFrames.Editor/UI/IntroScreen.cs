@@ -5,18 +5,18 @@ namespace MonkeFrames.Editor.UI;
 /// <summary>
 /// Minimal animated intro / loading screen shown when MonkeFrames starts.
 ///
-/// Timeline (seconds, 20 total):
-///    0.0 -  1.5  backdrop fades in
-///    1.0 -  5.2  logo fades in with a slow, soft left-to-right wipe and a gentle rise
-///    5.0 - 17.0  logo slowly "breathes"; a quiet ring ripples from the camera hand every 3.5s
-///    3.0 - 17.5  a thin loading line draws out under the logo
-///   18.0 - 20.0  logo drifts up and fades, backdrop lifts to reveal the editor
+/// Timeline (seconds, 10 total):
+///   0.0 - 1.0  backdrop fades in
+///   0.6 - 3.4  logo fades in with a soft left-to-right wipe and a gentle rise
+///   3.4 - 8.5  logo slowly "breathes"; a quiet ring ripples from the camera hand at 3.5s and 6.5s
+///   1.8 - 8.5  a thin loading line draws out under the logo
+///   9.0 - 10.0 logo drifts up and fades, backdrop lifts to reveal the editor
 /// Any key or mouse click skips straight to the exit.
 /// </summary>
 public static class IntroScreen
 {
-    public const float ExitStart = 18.0f;
-    public const float ExitLength = 2.0f;
+    public const float ExitStart = 9.0f;
+    public const float ExitLength = 1.0f;
     public const float Total = ExitStart + ExitLength;
 
     private const int Strips = 32;
@@ -70,11 +70,11 @@ public static class IntroScreen
 
         float sw = Screen.width, sh = Screen.height;
         float exit = Anim.InOutCubic(Mathf.Clamp01((t - ExitStart) / ExitLength));
-        float backdrop = Anim.InOutCubic(Mathf.Clamp01(t / 1.5f))
+        float backdrop = Anim.InOutCubic(Mathf.Clamp01(t / 1.0f))
             * (1f - Anim.InOutCubic(Mathf.Clamp01((t - ExitStart - 0.25f) / (ExitLength - 0.25f))));
 
         // Slow breathing once the logo has landed.
-        float breathe = t > 5.2f ? (Mathf.Sin((t - 5.2f) * 0.9f) * 0.5f + 0.5f) * (1f - exit) : 0f;
+        float breathe = t > 3.4f ? (Mathf.Sin((t - 3.4f) * 1.1f) * 0.5f + 0.5f) * (1f - exit) : 0f;
 
         Color prev = GUI.color;
 
@@ -97,19 +97,19 @@ public static class IntroScreen
 
         // ---- Quiet rings from the camera hand ----
         Vector2 hand = new Vector2(logo.x + logo.width * 0.868f, logo.y + logo.height * 0.27f);
-        // A quiet ring every 3.5 seconds while the logo is on screen.
-        for (float ringAt = 5.0f; ringAt < ExitStart - 1f; ringAt += 3.5f)
+        // A quiet ring every 3 seconds while the logo is on screen.
+        for (float ringAt = 3.5f; ringAt < ExitStart - 1f; ringAt += 3.0f)
             DrawRing(hand, t - ringAt, Color.white, logoW, logoAlpha);
 
         // ---- Thin loading line ----
-        float ui = Anim.InOutCubic(Mathf.Clamp01((t - 2.6f) / 1.0f)) * (1f - Anim.InOutCubic(Mathf.Clamp01((t - ExitStart) / 0.8f)));
+        float ui = Anim.InOutCubic(Mathf.Clamp01((t - 1.6f) / 0.7f)) * (1f - Anim.InOutCubic(Mathf.Clamp01((t - ExitStart) / 0.5f)));
         if (ui > 0.01f)
         {
             GUI.color = new Color(1, 1, 1, ui);
 
             float lineW = logoW * 0.42f;
             float y = logo.yMax + 44f;
-            float progress = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - 3.0f) / 14.5f));
+            float progress = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((t - 1.8f) / 6.7f));
 
             Theme.Fill(new Rect(center.x - lineW / 2f, y, lineW, 2), new Color(1, 1, 1, 0.12f), 0);
             float fw = lineW * progress;
@@ -133,7 +133,7 @@ public static class IntroScreen
         for (int i = 0; i < Strips; i++)
         {
             // Soft wipe: each strip starts a touch after the one to its left and eases up into place.
-            float local = Mathf.Clamp01((t - 1.0f - i * (2.4f / Strips)) / 1.8f);
+            float local = Mathf.Clamp01((t - 0.6f - i * (1.6f / Strips)) / 1.2f);
             if (local <= 0f) continue;
 
             float e = Anim.InOutCubic(local);
@@ -151,7 +151,7 @@ public static class IntroScreen
     /// <summary>An expanding, fading ring.</summary>
     private static void DrawRing(Vector2 center, float t, Color color, float logoW, float alpha)
     {
-        const float length = 2.2f;
+        const float length = 2.0f;
         if (t <= 0f || t >= length) return;
 
         float p = t / length;

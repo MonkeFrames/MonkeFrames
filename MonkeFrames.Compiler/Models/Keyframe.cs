@@ -28,6 +28,16 @@ public struct Keyframe
     /// Transition data for the keyframe.
     /// </summary>
     public Transition Transition = Transition.Linear;
+
+    /// <summary>
+    /// Apply camera motion blur while moving from this keyframe to the next.
+    /// </summary>
+    public bool MotionBlur = false;
+
+    /// <summary>
+    /// Motion blur strength (0 = subtle, 1 = heavy). Only used when <see cref="MotionBlur"/> is on.
+    /// </summary>
+    public float MotionBlurStrength = 0.5f;
     
     /// <summary>
     /// The keyframe's GUID, used for equating keyframes to each other efficiently.

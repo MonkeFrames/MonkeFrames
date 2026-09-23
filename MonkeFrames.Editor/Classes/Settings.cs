@@ -17,6 +17,12 @@ public class Settings
     /// <summary>Play the animated logo intro when MonkeFrames loads.</summary>
     public bool ShowIntro = true;
 
+    /// <summary>Play a chime when a notification pops up.</summary>
+    public bool NotificationSound = true;
+
+    /// <summary>Notification chime volume, 0..1.</summary>
+    public float NotificationVolume = 0.5f;
+
     /// <summary>Play UI transitions (window open/close, menus, hovers).</summary>
     public bool Animations = true;
 

@@ -73,6 +73,8 @@ public static class Compiler
                     Position = newPosition,
                     Rotation = newRotation.eulerAngles,
                     FieldOfView = newFOV,
+                    MotionBlur = keyframe.MotionBlur,
+                    MotionBlurStrength = keyframe.MotionBlurStrength,
                     Compiled = true
                 };
 
