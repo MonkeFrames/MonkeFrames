@@ -11,7 +11,7 @@ namespace MonkeFrames.Editor.Windows;
 public class SettingsWindow : IEditorWindow
 {
     public string Name => "Settings";
-    public Rect Rect => new Rect(120, 50, 480, 560);
+    public Rect Rect => new Rect(120, 50, 480, 690);
 
     public List<Color> colors = [
         Color.red,
@@ -110,6 +110,21 @@ public class SettingsWindow : IEditorWindow
         float ms = Settings.current.MouseSmoothing;
         GUI.Label(new Rect(w - x - 64, y, 64, 24), ms < 0.34f ? "Light" : ms < 0.67f ? "Medium" : "Heavy", Theme.LabelRight);
         GUI.enabled = true;
+        y += 38;
+
+        Widgets.Divider(x, y - 8, w - x * 2);
+
+        // ---- Spectator camera model ----
+        GUI.Label(new Rect(x, y, 300, 20), "SPECTATOR CAMERA MODEL", Theme.Header);
+        y += 24;
+        Settings.current.ShareMyCamera = Widgets.Switch("sharecam", new Rect(x, y, w - x * 2, 26), Settings.current.ShareMyCamera,
+            "Show my camera to other MonkeFrames users", "Players who also have MonkeFrames see a camera model where your camera is (in VR too). You never see your own.");
+        y += 30;
+        Settings.current.ShowOtherCameras = Widgets.Switch("othercams", new Rect(x, y, w - x * 2, 26), Settings.current.ShowOtherCameras,
+            "Show other people's cameras", "See where other MonkeFrames users are filming from.");
+        y += 30;
+        Settings.current.ShowCamerasInReplays = Widgets.Switch("replaycams", new Rect(x, y, w - x * 2, 26), Settings.current.ShowCamerasInReplays,
+            "Show cameras in replays", "Replays record every MonkeFrames camera (yours too) and show them as camera models.");
 
         // ---- Hint bar ----
         string hint = string.IsNullOrEmpty(GUI.tooltip) ? "Changes are saved when you close this window." : GUI.tooltip;

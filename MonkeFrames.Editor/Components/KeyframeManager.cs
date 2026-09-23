@@ -77,11 +77,21 @@ public class KeyframeManager : MonoBehaviour
         if (GUIUtility.keyboardControl != 0)
             return;
 
+        // In Replay Studio, keyframes are placed at the replay playhead and deleting keeps timing.
+        var studio = Replays.ReplayStudio.Instance;
+        bool inStudio = studio != null && studio.Active;
+
         if (Keyboard.current.vKey.wasPressedThisFrame)
-            CreateKeyframe();
+        {
+            if (inStudio) studio.AddKeyframeAtPlayhead();
+            else CreateKeyframe();
+        }
 
         if (Keyboard.current.fKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
-            GoToKeyframe(UIManager.Instance.Selection);
+        {
+            if (inStudio) studio.GoTo(UIManager.Instance.Selection);
+            else GoToKeyframe(UIManager.Instance.Selection);
+        }
 
         if (Keyboard.current.tKey.wasPressedThisFrame)
             CreateKeyframe(lookAtPlayer: true);
@@ -90,7 +100,10 @@ public class KeyframeManager : MonoBehaviour
             CreateKeyframe(replaceKeyframeIdx: UIManager.Instance.Selection);
 
         if (Keyboard.current.deleteKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
-            DeleteKeyframe(UIManager.Instance.Selection);
+        {
+            if (inStudio) studio.DeleteKeyframe(UIManager.Instance.Selection);
+            else DeleteKeyframe(UIManager.Instance.Selection);
+        }
     }
 
     /// <summary>Move the camera to a keyframe's position, rotation and FOV.</summary>
@@ -158,6 +171,13 @@ public class KeyframeManager : MonoBehaviour
 
         if (replaceKeyframeIdx != -1)
         {
+            // Replacing a keyframe keeps its timing and transition; only the camera changes.
+            Keyframe old = Project.Keyframes[replaceKeyframeIdx];
+            k.Transition = old.Transition;
+            k.MotionBlur = old.MotionBlur;
+            k.MotionBlurStrength = old.MotionBlurStrength;
+
+            try { Objects[old].Destroy(); Objects.Remove(old); } catch { }
             Project.Keyframes.RemoveAt(replaceKeyframeIdx);
             Project.Keyframes.Insert(replaceKeyframeIdx, k);
         } else

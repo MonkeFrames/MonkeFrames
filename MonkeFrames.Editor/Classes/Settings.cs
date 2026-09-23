@@ -38,6 +38,15 @@ public class Settings
     /// <summary>How much mouse look is smoothed, 0 (light) to 1 (heavy, very floaty).</summary>
     public float MouseSmoothing = 0.5f;
 
+    /// <summary>Let other MonkeFrames users see a camera model where your camera is.</summary>
+    public bool ShareMyCamera = true;
+
+    /// <summary>Show other MonkeFrames users' cameras.</summary>
+    public bool ShowOtherCameras = true;
+
+    /// <summary>Show recorded spectator cameras when watching replays.</summary>
+    public bool ShowCamerasInReplays = true;
+
     public static void Load()
     {
         var settings = new JsonSerializerSettings

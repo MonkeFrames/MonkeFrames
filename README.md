@@ -32,6 +32,39 @@ This build adds a fully custom, animated interface and a smooth keyframes option
 - Status messages appear as a toast at the bottom-left with a countdown bar.
 - Settings: turn UI animations off or change their speed.
 
+**Other Cameras** (new menu + window)
+- Live camera modes that follow any gorilla in your lobby, or yourself: **Orbit**, **First Person**, **Follow**, **Shoulder** and **Tracking**. Switching modes blends smoothly; going back to Free returns the camera to where it was. Press V in any mode to keyframe that view. If the watched player leaves, it switches to you.
+- **Orbit** always keeps the gorilla centred. Auto spin on/off + speed, distance, angle, height, "turn with gorilla". Manual control: left-drag, A/D around, W/S angle, Q/E height, scroll zoom, Shift = faster.
+- **First Person** is locked exactly to the head (no position lag); only turning is smoothed. Level horizon and eye offset.
+- **Follow**: distance, height, side offset, turn lag (scroll = distance). **Shoulder**: distance, height, side, swap shoulder (scroll = distance). **Tracking**: optional auto-zoom that keeps the gorilla the same size.
+- **Front / Selfie**: in front of the gorilla looking back at their face (distance, height, turn lag). **Top Down**: bird's-eye view (height, turn with gorilla). **Side View**: side-on "2D" view from a fixed direction (direction, distance, height). **Hand Cam**: strapped to the left or right hand, looking at the face or along the hand. **Director**: automatic shots that cut or glide between Orbit, Follow, Front, Shoulder, Top Down and Side View every few seconds.
+- **No more lag when spectating**: the camera is now placed at the last moment before each frame renders, after every player (including remote players) has moved, and it is locked rigidly to the player. Smoothing only eases angle changes, never makes the camera trail behind. Want a floaty drone feel? Turn up the new *Position lag* slider (default 0 = locked).
+- Motion blur in Other Cameras keeps the gorilla you're watching sharp while the world streaks past (like a camera riding along with them), and the blur is centred on the current frame so it never looks like the camera is lagging behind, even in First Person at full speed.
+- Every mode: FOV, smoothing, position lag, aim height, tilt (dutch angle), handheld shake, real-time motion blur, and Reset. The window scrolls if it doesn't fit your screen.
+
+**Spectator camera model**
+- While your MonkeFrames camera is in use (free cam, any Other Camera, playback), other players who also have MonkeFrames see a camera model (with your name and a blinking light) where your camera is, including in VR. You never see your own.
+- Settings > Spectator camera model: *Show my camera to other MonkeFrames users*, *Show other people's cameras*, *Show cameras in replays*.
+- Replays record every MonkeFrames camera (yours and other mod users') and show them as camera models during playback (toggle in the Replays window).
+- Sent as a tiny unreliable Photon event (~12 per second) to the other players in the room; players without MonkeFrames just ignore it.
+
+**Replays** (new menu + window, F9 to record)
+- Press **F9** (or *Start recording* in the Replays window) and everyone in the lobby is recorded: their movement (body, arms, head, fingers, cosmetics) and their **voice chat**, plus **your own mic**. Press F9 again to stop; the replay opens straight away and saves itself to *Documents/MonkeFrames/replays*.
+- Quality 30 / 60 / 90 fps, max length 5-30 min, and switches for recording voices and your mic.
+- Playback uses copies of each gorilla, so you can fly the free camera around them or point **any Other Camera** at them (Orbit, First Person, Follow, Director...). Hit *Film* next to a gorilla, or pick them from the Other Cameras list (marked "replay").
+- Editing: scrub the timeline, drag the In/Out handles (or *Set In* / *Set Out*) to trim, 0.25x-2x slow motion, loop, rename, hide a gorilla, mute someone's voice. Lanes under the timeline show when each gorilla is in the replay; ticks show when people talk. Save, load and delete replays in *Saved replays*.
+- **Sync with keyframes**: keyframe time 0 = the replay's In point, so the Player, *Project > Play* and **MP4 export** play the replay in time with your camera animation. Build a camera move over a replay and export it.
+- Playback options: hide the live players while watching, mute the live game, 3D voices (they pan and fade with the camera) and voice volume up to 200%.
+- Notes: replays you just recorded keep everyone's exact look. Replays loaded from a file rebuild gorillas from your own gorilla's model with their colour and cosmetics where possible, and without name tags. MP4 export is video only (voices aren't in the video file yet). Replays happen where they were recorded, so load them in the same map.
+
+**Replay Studio** (editing layout, only while a replay is open)
+- When a replay is showing, the screen switches to an editing layout: the game view becomes a viewport (top left), with **Camera Preview** and **Keyframe** inspector on the right, and **Replay** transport + a **Timeline** along the bottom. Close the replay (or press *Exit*) and everything goes back to normal.
+- The timeline is in replay time: rows for keyframes, transitions (coloured by type), FOV, motion blur, when each gorilla is present, and voice. Click / drag to scrub, drag a keyframe diamond to retime it (other keys stay put), double-click to jump the camera there, mouse wheel to zoom, Shift+wheel to pan.
+- **V** adds a keyframe from the current camera exactly at the playhead (between keys if needed), **X** / *Update* moves the selected keyframe to the camera, **Delete** removes it without shifting the others, **F** jumps to it. **Space** plays / pauses, **,** and **.** step one frame.
+- Camera Preview shows what your keyframe camera sees at the playhead (live render). *Viewport follows camera path* looks through it in the main view; *Show path* draws the camera path in the world.
+- Replay panel: play/pause, frame stepping, 0.1x-2x speed, frame slider, loop, hide live players, mute game, voice volume. Timeline toolbar: Add, Update, Delete, Clear All, Save / Load project and Export (MP4 of your keyframes over the replay).
+- Turn the layout on or off in the Replays window or *Replays > Replay Studio Layout*.
+
 **Motion blur**
 - Keyframe Editor: a *Motion blur* switch and strength slider per keyframe (under FOV). The camera is blurred while it moves from that keyframe to the next, in the Player preview (while playing), Project > Play and MP4 export. "All" copies the setting to every keyframe.
 - Real camera motion blur: each frame the camera is rendered several extra times at in-between positions along its path (6 samples in preview, 12 in MP4 export) and the renders are averaged, like a film camera's open shutter. Strength sets the shutter length. Cuts and teleports are never blurred.

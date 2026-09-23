@@ -132,6 +132,9 @@ public class UIManager : MonoBehaviour
             if (gui.y <= MenuBarHeight || _dropdownRect.Contains(gui))
                 return true;
 
+            if (Replays.ReplayStudio.Instance != null && Replays.ReplayStudio.Instance.OverPanels(gui))
+                return true;
+
             foreach (IEditorWindowManager w in Windows)
                 if (w.Visible && w.WindowPosition.Contains(gui))
                     return true;
@@ -200,6 +203,9 @@ public class UIManager : MonoBehaviour
 
         CloseMenuOnOutsideClick();
         DrawMenuBar();
+
+        // Replay Studio's docked panels sit under the floating windows.
+        Replays.ReplayStudio.Instance?.DrawGUI();
 
         foreach (IEditorWindowManager window in Windows)
             window.Draw();

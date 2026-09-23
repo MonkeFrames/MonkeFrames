@@ -33,6 +33,8 @@ public class Plugin : BaseUnityPlugin
         tpc.AddComponent<KeyframeManager>();
         tpc.AddComponent<UIManager>();
         tpc.AddComponent<ConditionManager>();
+        tpc.AddComponent<CameraModes>();
+        tpc.AddComponent<Replays.ReplayManager>();
 
         Console.WriteLine("[MonkeFrames::Initialize] All components added");
 

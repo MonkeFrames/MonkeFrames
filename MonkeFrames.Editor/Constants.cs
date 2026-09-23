@@ -35,7 +35,7 @@ public static class Constants
     {
         DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
 
-        string[] folders = ["projects", "exports"];
+        string[] folders = ["projects", "exports", "replays"];
         foreach (string folder in folders)
             Directory.CreateDirectory(SystemUtilities.Combine(DataFolder, folder));
 

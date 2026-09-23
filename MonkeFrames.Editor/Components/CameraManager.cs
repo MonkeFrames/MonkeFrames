@@ -43,6 +43,9 @@ public class CameraManager : MonoBehaviour
     private MotionBlurController _blur;
     public bool Manual = false;
 
+    /// <summary>True while an "Other Cameras" mode drives the camera (free-fly controls are paused).</summary>
+    public bool ExternalControl = false;
+
     public CameraManager()
     {
         Instance = this;
@@ -98,7 +101,7 @@ public class CameraManager : MonoBehaviour
             Camera?.fieldOfView = FieldOfView;
         }
 
-        if (!InPlayback)
+        if (!InPlayback && !ExternalControl)
         {
             float speed = 0.05f;
 
@@ -303,6 +306,16 @@ public class CameraManager : MonoBehaviour
     }
 
     int playbackPosition = 0;
+
+    /// <summary>Seconds into the keyframe animation during Project > Play / Export (used to sync replays).</summary>
+    public float PlaybackSeconds => playbackPosition / (float)Mathf.Max(1, KeyframeManager.Instance.Project.FPS);
+
+    /// <summary>
+    /// Time of the keyframe the camera is actually showing this frame. While exporting, the
+    /// position counter is bumped before the next frame renders, so the shown frame is one behind.
+    /// </summary>
+    public float AppliedPlaybackSeconds =>
+        Mathf.Max(0, doRecording ? playbackPosition - 1 : playbackPosition) / (float)Mathf.Max(1, KeyframeManager.Instance.Project.FPS);
     float playbackAccumulator = 0f;
     int playbackEnding;
 
