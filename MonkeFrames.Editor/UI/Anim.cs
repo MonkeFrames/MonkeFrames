@@ -4,11 +4,6 @@ using UnityEngine;
 
 namespace MonkeFrames.Editor.UI;
 
-/// <summary>
-/// Frame-rate independent tweening helpers for the immediate-mode UI.
-/// Values only advance once per rendered frame (on Repaint), so OnGUI being
-/// called several times per frame does not speed animations up.
-/// </summary>
 public static class Anim
 {
     private class Slot
