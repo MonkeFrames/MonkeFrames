@@ -5,9 +5,9 @@ using UnityEngine;
 
 namespace MonkeFrames.Editor.Windows;
 
-public class OtherCameras : IEditorWindow
+public class Sources : IEditorWindow
 {
-    public string Name => "Other Cameras";
+    public string Name => "Sources";
     public Rect Rect => new Rect(40, 44, 520, 780);
 
     private static readonly CameraMode[] Modes =

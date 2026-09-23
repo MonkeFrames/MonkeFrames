@@ -5,10 +5,10 @@ using MonkeFrames.Editor.Replays;
 
 namespace MonkeFrames.Editor.Menus;
 
-public class ReplaysMenu : IEditorMenu
+public class ReplayMenu : IEditorMenu
 {
-    public string Name => "Replays";
-    public int Index => 6;
+    public string Name => "Replay";
+    public int Index => 7;
 
     [EditorMenuItem("Open Replays")]
     public void Open() => UIManager.Instance.OpenWindow("Replays");

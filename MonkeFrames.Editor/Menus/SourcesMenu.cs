@@ -4,13 +4,13 @@ using MonkeFrames.Editor.Interfaces;
 
 namespace MonkeFrames.Editor.Menus;
 
-public class OtherCamerasMenu : IEditorMenu
+public class SourcesMenu : IEditorMenu
 {
-    public string Name => "Other Cameras";
-    public int Index => 5;
+    public string Name => "Sources";
+    public int Index => 6;
 
-    [EditorMenuItem("Open Other Cameras")]
-    public void Open() => UIManager.Instance.OpenWindow("Other Cameras");
+    [EditorMenuItem("Open Sources")]
+    public void Open() => UIManager.Instance.OpenWindow("Sources");
 
     [EditorMenuItem("Free Camera", Separator = true)]
     public void Free() => CameraModes.Instance?.SetMode(CameraMode.Free);
@@ -48,6 +48,6 @@ public class OtherCamerasMenu : IEditorMenu
     private static void Switch(CameraMode mode)
     {
         CameraModes.Instance?.SetMode(mode);
-        UIManager.Instance.OpenWindow("Other Cameras");
+        UIManager.Instance.OpenWindow("Sources");
     }
 }

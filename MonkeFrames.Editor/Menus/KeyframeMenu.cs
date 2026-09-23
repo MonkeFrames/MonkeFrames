@@ -7,7 +7,7 @@ namespace MonkeFrames.Editor.Menus;
 public class KeyframeMenu : IEditorMenu
 {
     public string Name => "Keyframe";
-    public int Index => 4;
+    public int Index => 5;
 
     [EditorMenuItem("New", Shortcut = "V")]
     public void NewKeyframe()

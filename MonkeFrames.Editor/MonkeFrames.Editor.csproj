@@ -46,15 +46,19 @@
       <EmbeddedResource Include="Resources/MFintroLogo.png">
         <LogicalName>introLogo</LogicalName>
       </EmbeddedResource>
-      <EmbeddedResource Include="Resources/SpectatorCamera.obj">
-        <LogicalName>spectatorCam</LogicalName>
-      </EmbeddedResource>
+	  <EmbeddedResource Include="Resources/Spectator_Camera.glb">
+		 <LogicalName>spectatorCam</LogicalName>
+	  </EmbeddedResource>
       <EmbeddedResource Include="Resources/SpectatorCamera_Albedo.png">
         <LogicalName>camAlbedo</LogicalName>
       </EmbeddedResource>
       <EmbeddedResource Include="Resources/SpectatorCamera_RGB.png">
         <LogicalName>camRGB</LogicalName>
       </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Include="Menus\MoveMenu.cs" />
     </ItemGroup>
 
     <ItemGroup>

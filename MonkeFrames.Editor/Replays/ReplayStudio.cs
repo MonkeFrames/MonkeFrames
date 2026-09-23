@@ -891,8 +891,8 @@ public class ReplayStudio : MonoBehaviour
         GUI.enabled = true;
         if (b.xMax - tx > 250)
         {
-            if (GUI.Button(new Rect(b.xMax - 244, ty, 76, 26), "Save")) new Menus.ProjectMenu().SaveProject();
-            if (GUI.Button(new Rect(b.xMax - 164, ty, 76, 26), "Load")) new Menus.ProjectMenu().LoadProject();
+            if (GUI.Button(new Rect(b.xMax - 244, ty, 76, 26), "Save")) new Menus.FileMenu().SaveProject();
+            if (GUI.Button(new Rect(b.xMax - 164, ty, 76, 26), "Open")) new Menus.FileMenu().OpenProject();
             if (GUI.Button(new Rect(b.xMax - 84, ty, 84, 26), "Export", Theme.AccentButton)) Export();
         }
 

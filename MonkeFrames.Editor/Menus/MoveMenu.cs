@@ -7,10 +7,10 @@ namespace MonkeFrames.Editor.Menus;
 
 using Keyframe = MonkeFrames.Compiler.Models.Keyframe;
 
-public class GoMenu : IEditorMenu
+public class MoveMenu : IEditorMenu
 {
-    public string Name => "Go";
-    public int Index => 2;
+    public string Name => "Move";
+    public int Index => 3;
 
     [EditorMenuItem("To Gorilla")]
     public void ToGorilla()
