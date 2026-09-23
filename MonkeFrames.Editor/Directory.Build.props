@@ -6,4 +6,11 @@
 		<BepInExAssemblyPath>$(GamePath)\BepInEx\core</BepInExAssemblyPath>
         <DependenciesPath>$(SolutionDir)Build\Dependencies</DependenciesPath>
     </PropertyGroup>
+
+    <PropertyGroup Condition="'$(CI)'=='TRUE'">
+        <GamePath>$(SolutionDir)Libs</GamePath>
+        <GameAssemblyPath>$(SolutionDir)Libs</GameAssemblyPath>
+        <DependenciesPath>$(SolutionDir)Libs</DependenciesPath>
+        <DependenciesPath>$(SolutionDir)Build\Dependencies</DependenciesPath>
+    </PropertyGroup>
 </Project>
