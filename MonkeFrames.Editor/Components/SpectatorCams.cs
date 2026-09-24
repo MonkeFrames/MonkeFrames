@@ -322,7 +322,7 @@ public static class CamModel
         catch { return null; }
     }
 
-    private static Texture2D _albedo, _rgb;
+    private static Texture2D _albedo;
     private static bool _texturesLoaded;
     private static readonly Dictionary<Color32, Material> _materials = new();
 
@@ -371,8 +371,7 @@ public static class CamModel
         if (!_texturesLoaded)
         {
             _texturesLoaded = true;
-            _albedo = LoadTexture("Albedo.png", "camAlbedo");
-            _rgb = LoadTexture("RGB.png", "camRGB");
+            _albedo = LoadTexture("Albedo.png", "spectatorCamTex");
         }
 
         Material m;
@@ -384,41 +383,10 @@ public static class CamModel
         else
         {
             Texture2D baseMap = _albedo;
-            if (_rgb != null)
-            {
-                // Bake the player colour into the strips.
-                Color32[] a = _albedo.GetPixels32();
-                int w = _albedo.width, h = _albedo.height;
-                bool same = _rgb.width == w && _rgb.height == h;
-                Color32[] mask = same ? _rgb.GetPixels32() : null;
-                Color32 tc = tint;
-                for (int i = 0; i < a.Length; i++)
-                {
-                    float k = same ? mask[i].r / 255f
-                        : _rgb.GetPixelBilinear((i % w + 0.5f) / w, (i / w + 0.5f) / h).r;
-                    if (k <= 0.01f) continue;
-                    k = Mathf.Clamp01(k * 1.6f);
-                    a[i] = Color32.Lerp(a[i], tc, k);
-                }
-                baseMap = new Texture2D(w, h, TextureFormat.RGBA32, true);
-                baseMap.SetPixels32(a);
-                baseMap.Apply(true, true);
-                baseMap.wrapMode = TextureWrapMode.Clamp;
-                baseMap.filterMode = FilterMode.Trilinear;
-                baseMap.anisoLevel = 4;
-            }
 
             m = MakeMaterial(Color.white, false);
             m.mainTexture = baseMap;
             if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", baseMap);
-
-            if (_rgb != null && m.HasProperty("_EmissionMap"))
-            {
-                m.SetTexture("_EmissionMap", _rgb);
-                m.SetColor("_EmissionColor", tint * 2.2f);
-                m.EnableKeyword("_EMISSION");
-                m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
-            }
         }
 
         _materials[key] = m;
@@ -451,7 +419,7 @@ public static class CamModel
                     }
                     else
                     {
-                        using Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("spectatorCam");
+                        using Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("spectatorCamObj");
                         using StreamReader r = new StreamReader(s);
                         text = r.ReadToEnd();
                     }
