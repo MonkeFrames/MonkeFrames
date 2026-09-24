@@ -125,6 +125,7 @@ public class KeyframeManager : MonoBehaviour
         UIManager.Instance.Selection = -1;
         Project = p;
         RefreshOrbs();
+        ObjectManager.Instance?.SyncWithProject();
     }
 
     public bool IsCompiling;

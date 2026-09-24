@@ -70,14 +70,5 @@ public class About : IEditorWindow
 
         if (GUI.Button(new Rect(w - 110, Rect.height - 42, 96, 28), "OK", Theme.AccentButton))
             UIManager.Instance.CloseWindow("About MonkeFrames");
-
-        if (GUI.Button(new Rect(w - 234, Rect.height - 42, 116, 28), "Source Code"))
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "https://github.com/sirkingbinx/MonkeFrames",
-                UseShellExecute = true
-            });
-        }
     }
 }

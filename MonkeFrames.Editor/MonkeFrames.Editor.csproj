@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>netstandard2.1</TargetFramework>
 	      <PlatformTarget>x64</PlatformTarget>
@@ -46,14 +46,11 @@
       <EmbeddedResource Include="Resources/MFintroLogo.png">
         <LogicalName>introLogo</LogicalName>
       </EmbeddedResource>
-	  <EmbeddedResource Include="Resources/Spectator_Camera.glb">
-		 <LogicalName>spectatorCam</LogicalName>
-	  </EmbeddedResource>
-      <EmbeddedResource Include="Resources/SpectatorCamera_Albedo.png">
-        <LogicalName>camAlbedo</LogicalName>
-      </EmbeddedResource>
-      <EmbeddedResource Include="Resources/SpectatorCamera_RGB.png">
-        <LogicalName>camRGB</LogicalName>
+	    <EmbeddedResource Include="Resources/MFCamera.obj">
+		    <LogicalName>spectatorCamObj</LogicalName>
+	    </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFCamera.png">
+        <LogicalName>spectatorCamTex</LogicalName>
       </EmbeddedResource>
     </ItemGroup>
 

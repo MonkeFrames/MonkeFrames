@@ -31,13 +31,16 @@ public class Project
     public List<Keyframe> Keyframes { get; set; }
 
     /// <summary>
-    /// FPS of the project. Any of <see cref="SupportedFPS"/> (24 up to 360).
+    /// Spawned 3D objects associated with the project.
     /// </summary>
+    public List<PlacedObject> PlacedObjects { get; set; }
+
+    private int _fps = 60;
     public int FPS {
-        get => field;
+        get => _fps;
         set {
             if (Array.IndexOf(SupportedFPS, value) >= 0)
-                field = value;
+                _fps = value;
             else
                 throw new ArgumentException($"FPS must be one of: {string.Join(", ", SupportedFPS)}.", nameof(value));
         }
@@ -48,15 +51,12 @@ public class Project
     /// </summary>
     public static readonly int[] SupportedFPS = [24, 30, 48, 50, 60, 90, 120, 144, 165, 240, 300, 360];
 
-    /// <summary>
-    /// How strongly "Smooth" keyframes carry momentum through each keyframe.
-    /// 0 = ease to a stop at every keyframe, 1 = fully flowing spline (default).
-    /// </summary>
+    private float _smoothness = 1f;
     public float Smoothness
     {
-        get => field;
-        set => field = Math.Clamp(value, 0f, 1.5f);
-    } = 1f;
+        get => _smoothness;
+        set => _smoothness = Math.Clamp(value, 0f, 1.5f);
+    }
 
     /// <summary>
     /// A list of built keyframes for the project for use with cameras.
@@ -95,5 +95,6 @@ public class Project
         Exporter = projectExporter;
         FPS = 60;
         Keyframes = new List<Keyframe>();
+        PlacedObjects = new List<PlacedObject>();
     }
 }

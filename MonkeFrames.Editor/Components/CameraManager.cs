@@ -98,7 +98,8 @@ public class CameraManager : MonoBehaviour
             CameraMarker.transform.position = Position;
             CameraMarker.transform.rotation = Rotation;
 
-            Camera?.fieldOfView = FieldOfView;
+            if (Camera != null)
+                Camera.fieldOfView = FieldOfView;
         }
 
         if (!InPlayback && !ExternalControl)

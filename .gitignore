@@ -419,3 +419,5 @@ FodyWeavers.xsd
 Build/latest/ffmpeg.exe
 Build/latest/MonkeFrames.zip
 Build/latest/README.txt
+
+!/MonkeFrames.Editor/Resources/MFCamera.obj

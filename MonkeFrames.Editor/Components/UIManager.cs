@@ -158,7 +158,8 @@ public class UIManager : MonoBehaviour
     public void ToggleWindow(string menuName)
     {
         var w = Windows.FirstOrDefault(w => w.Window.Name == menuName);
-        w?.Visible = !w.Visible;
+        if (w != null)
+            w.Visible = !w.Visible;
         Console.WriteLine($"[MonkeFrames::UIManager] {menuName}.Visible = {w?.Visible ?? false};");
     }
 

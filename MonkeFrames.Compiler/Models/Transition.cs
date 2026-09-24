@@ -48,18 +48,11 @@ public struct Transition
     /// <summary>
     /// The default transition.
     /// </summary>
-    public static Transition Linear
+    public static Transition Linear => new Transition
     {
-        get
-        {
-            field = new Transition();
-
-            field.Effect = TransitionEffect.Linear;
-            field.Duration = 5f;
-
-            return field;
-        }
-    }
+        Effect = TransitionEffect.Linear,
+        Duration = 5f
+    };
 
 }
 

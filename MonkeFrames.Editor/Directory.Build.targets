@@ -12,19 +12,14 @@
 		<ItemGroup>
 			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Compiler.dll" />
 			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Editor.dll" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\ffmpeg\ffmpeg.exe" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\Misc\README.txt" />
 		</ItemGroup>
-
-		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(SolutionDir)Build\latest\tmp\BepInEx\plugins\MonkeFrames"/>
-		<ZipDirectory
-			SourceDirectory="$(SolutionDir)Build\latest\tmp"
-			DestinationFile="$(SolutionDir)Build\latest\MonkeFrames.zip"
-			Overwrite="true" />
-		<RemoveDir Directories="$(SolutionDir)Build\latest\tmp" />
 
 		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(SolutionDir)Build\latest"/>
 		<Message Text="Copied assemblies to build folder -> Build\latest" Importance="high"/>
 
-		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(GamePath)\BepInEx\plugins\MonkeFrames\" ContinueOnError="true"/>
+		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(GamePath)\BepInEx\plugins\MonkeFrames\"/>
 		<Message Text="MonkeFrames installed to $(GamePath)\BepInEx\plugins\MonkeFrames" Importance="high"/>
 	</Target>
 </Project>

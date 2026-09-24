@@ -11,19 +11,20 @@ namespace MonkeFrames.Editor;
 public static class Constants
 {
     public const string Name = "MonkeFrames";
-    public const string Guid = "bingus.monkeframes";
-    public const string Version = "1.3";
+    public const string Guid = "dev.sirkingbinx.monkeframes";
+    public const string Version = "2.0";
     public static readonly string VersionID = $"{Version} Beta 1";
 
+    private static string _buildDate;
     public static string BuildDate
     {
         get
         {
-            field ??= Assembly.GetExecutingAssembly()
+            _buildDate ??= Assembly.GetExecutingAssembly()
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(attr => attr.Key == "BuildTime")?.Value;
 
-            return field;
+            return _buildDate;
         }
     }
 
@@ -47,6 +48,7 @@ public static class Constants
         {"SirKingBinx", "Developer" },
         {"uhJames", "Developer" },
         {"YourBoiAlex", "Developer" },
+        {"Olibobs", "Developer" },
         {"", "" },
         {"MrNubbaWubington", "Tester" },
         {"nebwella", "Tester" },
