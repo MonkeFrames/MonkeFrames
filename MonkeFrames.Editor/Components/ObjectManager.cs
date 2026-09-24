@@ -29,10 +29,8 @@ public class ObjectManager : MonoBehaviour
     {
         get
         {
-            string dir = Constants.MonkeFramesAssemblyFolder;
-            if (string.IsNullOrEmpty(dir))
-                dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? "";
-            return Path.Combine(dir, "Objects");
+            string dir = Constants.DataFolder;
+            return Path.Combine(Constants.DataFolder, "objects");
         }
     }
 

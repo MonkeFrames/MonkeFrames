@@ -526,7 +526,7 @@ public class ReplayStudio : MonoBehaviour
             return;
 
         Keyframe? f = FrameAt(RM.Time);
-        if (f == null)
+        if (f is null)
             return;
 
         if (Time.unscaledTime < _nextPreview)

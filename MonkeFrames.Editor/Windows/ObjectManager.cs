@@ -1,8 +1,9 @@
-using System.Collections.Generic;
 using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.UI;
+using System.Collections.Generic;
+using System.Diagnostics;
 using UnityEngine;
 
 namespace MonkeFrames.Editor.Windows;
@@ -36,6 +37,15 @@ public class ObjectManagerWindow : IEditorWindow
             om.EnsureDirectoryExists();
             om.SyncWithProject();
             UIManager.Instance.Status = "Refreshed Objects folder.";
+        }
+
+        if (GUI.Button(new Rect(w - 214, y - 2, 94, 26), "Open Folder", Theme.AccentButton))
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = ObjectManager.ObjectsFolder,
+                UseShellExecute = true
+            });
         }
         y += 28f;
 

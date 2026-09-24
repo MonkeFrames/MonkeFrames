@@ -66,6 +66,7 @@ public struct Keyframe
     public static bool operator ==(Keyframe? left, Keyframe? right)
     {
         if (left is null) return right is null;
+        if (right is null) return left is null;
         return left.Value.GUID == right.Value.GUID;
     }
 

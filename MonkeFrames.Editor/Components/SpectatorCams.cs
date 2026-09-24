@@ -387,7 +387,7 @@ public static class CamModel
         catch { return null; }
     }
 
-    private static Texture2D _albedo;
+    private static Texture2D _albedo, _rgb;
     private static bool _texturesLoaded;
     private static readonly Dictionary<Color32, Material> _materials = new();
 

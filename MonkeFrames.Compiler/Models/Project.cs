@@ -36,6 +36,10 @@ public class Project
     public List<PlacedObject> PlacedObjects { get; set; }
 
     private int _fps = 60;
+
+    /// <summary>
+    /// Frames-per-second generated during compilation.
+    /// </summary>
     public int FPS {
         get => _fps;
         set {
@@ -52,6 +56,10 @@ public class Project
     public static readonly int[] SupportedFPS = [24, 30, 48, 50, 60, 90, 120, 144, 165, 240, 300, 360];
 
     private float _smoothness = 1f;
+
+    /// <summary>
+    /// The amount of smoothing applied to compiled keyframes.
+    /// </summary>
     public float Smoothness
     {
         get => _smoothness;

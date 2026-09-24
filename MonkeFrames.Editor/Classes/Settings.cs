@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using MonkeFrames.Editor.Classes.NewtonsoftConverters;
 using MonkeFrames.Editor.Components;
@@ -38,6 +39,13 @@ public class Settings
     /// <summary>How much mouse look is smoothed, 0 (light) to 1 (heavy, very floaty).</summary>
     public float MouseSmoothing = 0.5f;
 
+    /// <summary>Free cam tilt: sticks at level, and glides to level when you let go close to it.</summary>
+    public bool AutoLevel = true;
+    public float LevelSnapAngle = 3f;    // detent around 0° while tilting
+    public float AutoLevelAngle = 6f;    // let go within this many degrees = glide to level
+    /// <summary>Double right-click levels the horizon.</summary>
+    public bool DoubleClickLevel = true;
+
     /// <summary>Let other MonkeFrames users see a camera model where your camera is.</summary>
     public bool ShareMyCamera = true;
 
@@ -47,7 +55,30 @@ public class Settings
     /// <summary>Show recorded spectator cameras when watching replays.</summary>
     public bool ShowCamerasInReplays = true;
 
-    // ---- Post Processing (MonkeFrames camera only) ----
+    /// <summary>Recolour the spectator camera's logo and glow with each player's gorilla colour.</summary>
+    public bool TintCameraLogo = false;
+
+    /// <summary>Start recording a replay whenever you join a lobby; stop and save when you leave.</summary>
+    public bool AutoRecordReplays = false;
+
+    // ---- Tag effects (neon explosion when someone gets tagged) ----
+    public bool TagFX = true;
+    public int TagFXWho = 0;            // 0 everyone, 1 only me, 2 only others
+    public int TagFXColorMode = 0;      // 0 gorilla colour, 1 custom, 2 rainbow
+    public Color TagFXColor = new Color(1f, 0.1f, 0.6f);
+    public Color TagFXColor2 = new Color(0.3f, 0.95f, 1f);
+    public float TagFXSize = 1f;
+    public float TagFXDuration = 1.2f;
+    public float TagFXIntensity = 1.5f;
+    public int TagFXSparks = 90;
+    public float TagFXSparkSpeed = 1f;
+    public float TagFXGravity = 0.6f;
+    public int TagFXRings = 2;
+    public bool TagFXFlash = true;
+    public bool TagFXLight = true;
+    public bool TagFXSound = true;
+    public float TagFXVolume = 0.5f;
+
     public bool Bloom = false;
     public float BloomIntensity = 0.8f;
     public float BloomThreshold = 0.5f;
@@ -61,6 +92,9 @@ public class Settings
     public bool GlobalMotionBlur = false;
     public float GlobalMotionBlurStrength = 0.5f;
     public int MotionBlurSamples = 6;
+
+    /// <summary>Tag explosions: also draw them in the VR headset (off = MonkeFrames camera only).</summary>
+    public bool TagFXInVR = false;
 
     public bool DepthOfField = false;
     public bool DofAutoFocus = true;

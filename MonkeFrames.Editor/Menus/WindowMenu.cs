@@ -15,13 +15,6 @@ public class WindowMenu : IEditorMenu
         UIManager.Instance.ToggleWindow("Keyframe Editor");
     }
 
-    [EditorMenuItem("Player")]
-    public void Player()
-    {
-        UIManager.Instance.ToggleWindow("Player");
-    }
-
-
     [EditorMenuItem("Room Manager")]
     public void RoomManager()
     {
@@ -38,5 +31,11 @@ public class WindowMenu : IEditorMenu
     public void ObjectManager()
     {
         UIManager.Instance.ToggleWindow("Object Manager");
+    }
+
+    [EditorMenuItem("Keyframe Player")]
+    public void Player()
+    {
+        UIManager.Instance.ToggleWindow("Player");
     }
 }
