@@ -15,15 +15,16 @@ public static class Constants
     public const string Version = "2.0";
     public static readonly string VersionID = $"{Version} Beta 1";
 
+    private static string _buildDate;
     public static string BuildDate
     {
         get
         {
-            field ??= Assembly.GetExecutingAssembly()
+            _buildDate ??= Assembly.GetExecutingAssembly()
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(attr => attr.Key == "BuildTime")?.Value;
 
-            return field;
+            return _buildDate;
         }
     }
 

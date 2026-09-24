@@ -33,4 +33,10 @@ public class WindowMenu : IEditorMenu
     {
         UIManager.Instance.ToggleWindow("Environment Manager");
     }
+
+    [EditorMenuItem("Object Manager")]
+    public void ObjectManager()
+    {
+        UIManager.Instance.ToggleWindow("Object Manager");
+    }
 }
