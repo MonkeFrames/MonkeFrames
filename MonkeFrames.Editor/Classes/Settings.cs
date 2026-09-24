@@ -47,6 +47,95 @@ public class Settings
     /// <summary>Show recorded spectator cameras when watching replays.</summary>
     public bool ShowCamerasInReplays = true;
 
+    // ---- Post Processing (MonkeFrames camera only) ----
+    public bool Bloom = false;
+    public float BloomIntensity = 0.8f;
+    public float BloomThreshold = 0.5f;
+    public float BloomSize = 0.65f;
+    public float BloomScatter = 0.6f;
+    public Color BloomTint = Color.white;
+
+    public bool ChromaticAberration = false;
+    public float ChromaticIntensity = 0.35f;
+
+    public bool GlobalMotionBlur = false;
+    public float GlobalMotionBlurStrength = 0.5f;
+    public int MotionBlurSamples = 6;
+
+    public bool DepthOfField = false;
+    public bool DofAutoFocus = true;
+    public float DofFocus = 3f;
+    public float DofAperture = 0.35f;
+    public int DofSamples = 12;
+    public float DofFocusSpeed = 0.5f;
+
+    public bool ColorGrading = false;
+    public float Exposure = 0f;        // stops
+    public float Contrast = 1f;
+    public float Temperature = 0f;     // -1 cool .. 1 warm
+    public float Tint = 0f;            // -1 green .. 1 magenta
+
+    public bool Vignette = false;
+    public float VignetteIntensity = 0.4f;
+    public float VignetteSmoothness = 0.5f;
+    public bool VignetteRounded = true;
+    public Color VignetteColor = Color.black;
+
+    public bool FilmGrain = false;
+    public float GrainIntensity = 0.25f;
+    public float GrainSize = 0.4f;
+
+    public bool Letterbox = false;
+    public float LetterboxAspect = 2.39f;
+
+    public void ResetPostProcessing()
+    {
+        Bloom = false; BloomIntensity = 0.8f; BloomThreshold = 0.5f; BloomSize = 0.65f; BloomScatter = 0.6f; BloomTint = Color.white;
+        ChromaticAberration = false; ChromaticIntensity = 0.35f;
+        GlobalMotionBlur = false; GlobalMotionBlurStrength = 0.5f; MotionBlurSamples = 6;
+        DepthOfField = false; DofAutoFocus = true; DofFocus = 3f; DofAperture = 0.35f; DofSamples = 12; DofFocusSpeed = 0.5f;
+        ColorGrading = false; Exposure = 0f; Contrast = 1f; Temperature = 0f; Tint = 0f;
+        Vignette = false; VignetteIntensity = 0.4f; VignetteSmoothness = 0.5f; VignetteRounded = true; VignetteColor = Color.black;
+        FilmGrain = false; GrainIntensity = 0.25f; GrainSize = 0.4f;
+        Letterbox = false; LetterboxAspect = 2.39f;
+    }
+
+    /// <summary>One-click looks for the Post Processing window.</summary>
+    public void ApplyPostPreset(string name)
+    {
+        ResetPostProcessing();
+        switch (name)
+        {
+            case "Cinematic":
+                Bloom = true; BloomIntensity = 0.6f; BloomThreshold = 0.6f;
+                ColorGrading = true; Contrast = 1.15f; Temperature = 0.15f; Exposure = -0.1f;
+                Vignette = true; VignetteIntensity = 0.45f;
+                Letterbox = true; LetterboxAspect = 2.39f;
+                FilmGrain = true; GrainIntensity = 0.15f;
+                GlobalMotionBlur = true; GlobalMotionBlurStrength = 0.4f;
+                break;
+            case "Dreamy":
+                Bloom = true; BloomIntensity = 1.4f; BloomThreshold = 0.3f; BloomSize = 0.9f; BloomScatter = 0.8f;
+                BloomTint = new Color(1f, 0.85f, 0.95f);
+                ColorGrading = true; Contrast = 0.9f; Exposure = 0.2f; Tint = 0.15f;
+                Vignette = true; VignetteIntensity = 0.3f; VignetteSmoothness = 0.9f;
+                break;
+            case "Action":
+                Bloom = true; BloomIntensity = 0.7f;
+                ChromaticAberration = true; ChromaticIntensity = 0.4f;
+                GlobalMotionBlur = true; GlobalMotionBlurStrength = 0.8f;
+                ColorGrading = true; Contrast = 1.25f; Temperature = -0.1f;
+                Vignette = true; VignetteIntensity = 0.5f;
+                break;
+            case "Retro":
+                ChromaticAberration = true; ChromaticIntensity = 0.6f;
+                ColorGrading = true; Contrast = 1.1f; Temperature = 0.35f; Exposure = -0.2f;
+                Vignette = true; VignetteIntensity = 0.6f; VignetteSmoothness = 0.7f;
+                FilmGrain = true; GrainIntensity = 0.45f; GrainSize = 0.7f;
+                break;
+        }
+    }
+
     public static void Load()
     {
         var settings = new JsonSerializerSettings

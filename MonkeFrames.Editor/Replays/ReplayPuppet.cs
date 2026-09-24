@@ -16,6 +16,7 @@ public class ReplayPuppet : CamSubject
     public Transform HeadNode, LeftHandNode, RightHandNode;
 
     internal readonly List<Object> Owned = new();   // copied materials / meshes to clean up
+    internal PuppetBuilder.Ctx BuildCtx;            // lets us add cosmetics that load after recording starts
 
     public override string DisplayName => Track?.Name ?? "Gorilla";
     public override bool IsLocal => Track != null && Track.IsLocal;
@@ -125,9 +126,11 @@ public static class PuppetBuilder
 
     // ---------------- Building ----------------
 
-    private sealed class Ctx
+    internal sealed class Ctx
     {
         public Transform Source;
+        /// <summary>Extra gorillas to borrow parts from (loaded replays: cosmetics other rigs have loaded).</summary>
+        public readonly List<Transform> Sources = new();
         public ReplayPuppet Puppet;
         public readonly Dictionary<string, Transform> Nodes = new();
         public readonly Dictionary<Material, Material> Mats = new();
@@ -163,18 +166,17 @@ public static class PuppetBuilder
                     moving.Add(chain[i]);
         }
 
+        HashSet<Renderer> worn = WornRenderers(rig);
         foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
         {
-            if (r == null || !r.enabled || r.forceRenderingOff)
-                continue;
-            if (r is not SkinnedMeshRenderer && r is not MeshRenderer)
+            if (!Include(r, worn))
                 continue;
 
             string path = PathOf(r.transform, src);
             if (path == null)
                 continue;
 
-            if (CopyRenderer(ctx, r, path))
+            if (CopyRenderer(ctx, r, path, src))
             {
                 rendererPaths.Add(path);
                 if (r is MeshRenderer)
@@ -217,23 +219,114 @@ public static class PuppetBuilder
         return Finish(ctx, track);
     }
 
-    /// <summary>Load-time build: rebuild the gorilla from saved paths, using your own gorilla as the model.</summary>
+    /// <summary>
+    /// Which renderers belong in a replay copy: everything visible on the gorilla, plus every
+    /// cosmetic they're wearing even if the game has temporarily hidden it (Gorilla Tag hides
+    /// cosmetics of players behind you / far away in busy lobbies to save performance).
+    /// </summary>
+    private static bool Include(Renderer r, HashSet<Renderer> worn)
+    {
+        if (r == null || !r.gameObject.activeInHierarchy)
+            return false;
+        if (r is not SkinnedMeshRenderer && r is not MeshRenderer)
+            return false;
+        if (worn.Contains(r))
+            return true;
+        return r.enabled && !r.forceRenderingOff;
+    }
+
+    private static HashSet<Renderer> WornRenderers(VRRig rig)
+    {
+        var set = new HashSet<Renderer>();
+        try
+        {
+            if (rig.mainSkin != null) set.Add(rig.mainSkin);
+            var items = rig.cosmeticSet.items;
+            var registry = rig.cosmeticsObjectRegistry;
+            if (items != null && registry != null)
+                foreach (var item in items)
+                {
+                    if (string.IsNullOrEmpty(item.displayName)) continue;
+                    var inst = registry.Cosmetic(item.displayName);
+                    if (inst?.allRenderers == null) continue;
+                    foreach (Renderer r in inst.allRenderers)
+                        if (r != null) set.Add(r);
+                }
+        }
+        catch (System.Exception ex)
+        {
+            System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic lookup failed: {ex.Message}");
+        }
+        return set;
+    }
+
+    /// <summary>
+    /// While recording: copy any cosmetics that appeared after the gorilla was first seen
+    /// (cosmetics load in a moment after someone joins, or they change outfit).
+    /// </summary>
+    public static int AddNewRenderers(ReplayTrack track, VRRig rig)
+    {
+        ReplayPuppet p = track.Puppet;
+        if (p == null || p.BuildCtx == null || rig == null) return 0;
+
+        Transform src = rig.transform;
+        var known = new HashSet<string>(track.RendererPaths);
+        var added = new List<string>();
+        HashSet<Renderer> worn = WornRenderers(rig);
+
+        foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
+        {
+            if (!Include(r, worn)) continue;
+            string path = PathOf(r.transform, src);
+            if (path == null || known.Contains(path)) continue;
+            if (CopyRenderer(p.BuildCtx, r, path, src))
+            {
+                known.Add(path);
+                added.Add(path);
+            }
+        }
+
+        if (added.Count > 0)
+        {
+            var all = new List<string>(track.RendererPaths);
+            all.AddRange(added);
+            track.RendererPaths = all.ToArray();
+        }
+        return added.Count;
+    }
+
+    /// <summary>
+    /// Load-time build: rebuild the gorilla from saved paths. Parts come from your own gorilla, or
+    /// from any other gorilla in the game that has that cosmetic loaded.
+    /// </summary>
     public static ReplayPuppet BuildFromSaved(ReplayTrack track, VRRig model)
     {
         Transform src = model != null ? model.transform : null;
         Ctx ctx = Begin(track, src);
+        if (src != null) ctx.Sources.Add(src);
+        try
+        {
+            foreach (VRRig other in VRRigCache.Instance.GetAllRigs())
+                if (other != null && other.transform != src)
+                    ctx.Sources.Add(other.transform);
+        }
+        catch { }
 
-        if (src != null)
+        if (ctx.Sources.Count > 0)
         {
             foreach (string path in track.RendererPaths)
             {
-                Transform t = Find(src, path);
-                if (t == null) continue;
-                Renderer r = t.GetComponent<SkinnedMeshRenderer>();
-                if (r == null) r = t.GetComponent<MeshRenderer>();
-                // Name tags come from your own gorilla here, so they'd show your name: skip them.
-                if (r != null && r.GetComponent<TMP_Text>() == null)
-                    CopyRenderer(ctx, r, path);
+                foreach (Transform source in ctx.Sources)
+                {
+                    Transform t = Find(source, path);
+                    if (t == null) continue;
+                    Renderer r = t.GetComponent<SkinnedMeshRenderer>();
+                    if (r == null) r = t.GetComponent<MeshRenderer>();
+                    if (r == null) continue;
+                    // Name tags would show someone else's name: skip them.
+                    if (r.GetComponent<TMP_Text>() != null) break;
+                    if (CopyRenderer(ctx, r, path, source)) break;
+                }
             }
 
             // Tint the body with the player's colour.
@@ -273,6 +366,7 @@ public static class PuppetBuilder
 
         Ctx ctx = new Ctx { Source = source, Puppet = root.AddComponent<ReplayPuppet>() };
         ctx.Puppet.Track = track;
+        ctx.Puppet.BuildCtx = ctx;
         ctx.Nodes[""] = root.transform;
         return ctx;
     }
@@ -312,6 +406,10 @@ public static class PuppetBuilder
         t.SetParent(parent, false);
 
         Transform src = ctx.Source != null ? Find(ctx.Source, path) : null;
+        if (src == null)
+            foreach (Transform other in ctx.Sources)
+                if (other != ctx.Source && (src = Find(other, path)) != null)
+                    break;
         if (src != null)
         {
             go.layer = src.gameObject.layer;
@@ -328,7 +426,7 @@ public static class PuppetBuilder
         return t;
     }
 
-    private static bool CopyRenderer(Ctx ctx, Renderer r, string path)
+    private static bool CopyRenderer(Ctx ctx, Renderer r, string path, Transform srcRoot)
     {
         if (r is SkinnedMeshRenderer smr)
         {
@@ -343,14 +441,14 @@ public static class PuppetBuilder
             Transform[] mapped = new Transform[bones.Length];
             for (int i = 0; i < bones.Length; i++)
             {
-                string bp = bones[i] != null && ctx.Source != null ? PathOf(bones[i], ctx.Source) : null;
+                string bp = bones[i] != null && srcRoot != null ? PathOf(bones[i], srcRoot) : null;
                 mapped[i] = bp != null ? Node(ctx, bp) : null;
             }
             copy.bones = mapped;
 
-            if (smr.rootBone != null && ctx.Source != null)
+            if (smr.rootBone != null && srcRoot != null)
             {
-                string rp = PathOf(smr.rootBone, ctx.Source);
+                string rp = PathOf(smr.rootBone, srcRoot);
                 if (rp != null) copy.rootBone = Node(ctx, rp);
             }
 

@@ -62,6 +62,7 @@ public class ReplayManager : MonoBehaviour
         public Transform[] Parts;
         public VoiceTap Tap;
         public bool Closed;
+        public float NextCosmeticCheck;
     }
 
     private readonly List<Binding> _bindings = new();
@@ -109,6 +110,8 @@ public class ReplayManager : MonoBehaviour
             gameObject.AddComponent<ReplayStudio>();
         if (GetComponent<SpectatorCams>() == null)
             gameObject.AddComponent<SpectatorCams>();
+        if (GetComponent<PostFX>() == null)
+            gameObject.AddComponent<PostFX>();
     }
 
     internal void LateFallback()
@@ -274,6 +277,15 @@ public class ReplayManager : MonoBehaviour
     {
         if (UnityEngine.Time.unscaledTime >= _nextScan)
             ScanForRecording();
+
+        // Pick up cosmetics that finish loading (or change) after a gorilla was first recorded.
+        foreach (Binding b in _bindings)
+        {
+            if (b.Closed || UnityEngine.Time.unscaledTime < b.NextCosmeticCheck) continue;
+            b.NextCosmeticCheck = UnityEngine.Time.unscaledTime + 2f;
+            try { PuppetBuilder.AddNewRenderers(b.Track, b.Rig); }
+            catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Replay] Cosmetic update failed: {ex.Message}"); }
+        }
 
         DrainAudio();
 

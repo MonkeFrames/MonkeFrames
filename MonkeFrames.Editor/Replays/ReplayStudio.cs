@@ -592,11 +592,32 @@ public class ReplayStudio : MonoBehaviour
         Layout();
         ReplayManager rm = RM;
 
-        DrawViewportFrame(rm);
-        DrawPreview(rm);
-        DrawInspector(rm);
-        DrawReplayPanel(rm);
-        DrawTimeline(rm);
+        // Each panel is isolated: if one ever throws, the rest of the UI (and the layout) keeps working.
+        Safe("viewport", () => DrawViewportFrame(rm));
+        Safe("preview", () => DrawPreview(rm));
+        Safe("inspector", () => DrawInspector(rm));
+        Safe("replay", () => DrawReplayPanel(rm));
+        Safe("timeline", () => DrawTimeline(rm));
+    }
+
+    private readonly HashSet<string> _reported = new();
+
+    private void Safe(string panel, System.Action draw)
+    {
+        try
+        {
+            draw();
+        }
+        catch (ExitGUIException)
+        {
+            throw;
+        }
+        catch (System.Exception ex)
+        {
+            string key = panel + ex.GetType().Name + ex.Message;
+            if (_reported.Add(key))
+                System.Console.WriteLine($"[MonkeFrames::Studio] {panel} panel error: {ex}");
+        }
     }
 
     private static void Panel(Rect r, string title, out Rect body)
@@ -701,6 +722,8 @@ public class ReplayStudio : MonoBehaviour
 
         Rect content = new Rect(0, 0, w - 14, 330);
         _inspectorScroll = GUI.BeginScrollView(new Rect(b.x, b.y, b.width, b.height), _inspectorScroll, content);
+        try
+        {
         x = 0; y = 0; w = content.width;
 
         GUI.Label(new Rect(x, y, w, 22), $"Keyframe {sel}", Theme.Label);
@@ -766,8 +789,11 @@ public class ReplayStudio : MonoBehaviour
 
         if (GUI.Button(new Rect(x, y, w, 26), "Open Keyframe Editor (speed curve)"))
             UIManager.Instance.OpenWindow("Keyframe Editor");
-
-        GUI.EndScrollView();
+        }
+        finally
+        {
+            GUI.EndScrollView();
+        }
     }
 
     /// <summary>Jump the replay and the camera to keyframe i.</summary>
@@ -892,7 +918,7 @@ public class ReplayStudio : MonoBehaviour
         if (b.xMax - tx > 250)
         {
             if (GUI.Button(new Rect(b.xMax - 244, ty, 76, 26), "Save")) new Menus.FileMenu().SaveProject();
-            if (GUI.Button(new Rect(b.xMax - 164, ty, 76, 26), "Open")) new Menus.FileMenu().OpenProject();
+            if (GUI.Button(new Rect(b.xMax - 164, ty, 76, 26), "Load")) new Menus.FileMenu().OpenProject();
             if (GUI.Button(new Rect(b.xMax - 84, ty, 84, 26), "Export", Theme.AccentButton)) Export();
         }
 
@@ -932,11 +958,14 @@ public class ReplayStudio : MonoBehaviour
         float RowY(int r) => track.y + rulerH + r * rowH;
 
         GUI.BeginClip(new Rect(track.x, track.y, track.width, track.height));
+        float[] times;
+        try
+        {
         // Everything inside the clip uses local coordinates.
         float ox = track.x, oy = track.y;
         float L(double t) => ToX(t) - ox;
 
-        float[] times = keys.Count > 0 ? KeyTimes() : System.Array.Empty<float>();
+        times = keys.Count > 0 ? KeyTimes() : System.Array.Empty<float>();
         var frames = KM.Project.CompiledKeyframes;
 
         if (e.type == EventType.Repaint)
@@ -1024,8 +1053,11 @@ public class ReplayStudio : MonoBehaviour
             Theme.Fill(new Rect(phx - 1, 0, 2, track.height), Theme.Danger, 0);
             Theme.Fill(new Rect(phx - 5, 0, 10, 10), Theme.Danger, 2);
         }
-
-        GUI.EndClip();
+        }
+        finally
+        {
+            GUI.EndClip();
+        }
 
         // ---- Mouse ----
         int id = GUIUtility.GetControlID(FocusType.Passive);
