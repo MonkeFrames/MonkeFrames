@@ -11,8 +11,8 @@ namespace MonkeFrames.Editor;
 public static class Constants
 {
     public const string Name = "MonkeFrames";
-    public const string Guid = "bingus.monkeframes";
-    public const string Version = "1.3";
+    public const string Guid = "dev.sirkingbinx.monkeframes";
+    public const string Version = "2.0";
     public static readonly string VersionID = $"{Version} Beta 1";
 
     public static string BuildDate
@@ -47,6 +47,7 @@ public static class Constants
         {"SirKingBinx", "Developer" },
         {"uhJames", "Developer" },
         {"YourBoiAlex", "Developer" },
+        {"Olibobs", "Developer" },
         {"", "" },
         {"MrNubbaWubington", "Tester" },
         {"nebwella", "Tester" },
