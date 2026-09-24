@@ -10,7 +10,7 @@
 
     <PropertyGroup>
       <PackageId>MonkeFrames.Compiler</PackageId>
-      <Version>1.1.0</Version>
+      <Version>2.0.0</Version>
       <Authors>sirkingbinx</Authors>
       <Description>Create, edit, and export keyframe based camera movement in Gorilla Tag</Description>
       

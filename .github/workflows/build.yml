@@ -1,6 +1,12 @@
 name: Build
 
-on: push
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  TARGET_PROJECTS: |
+    ReplayCapture
 
 jobs:
   build:
@@ -19,4 +25,10 @@ jobs:
         uses: sirkingbinx/setup-gorilla-tag@1.0.0
 
       - name: Build Solution
-        run: dotnet build -c Debug
+        run: dotnet build -c Debug -o ./build
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: ./Build/latest

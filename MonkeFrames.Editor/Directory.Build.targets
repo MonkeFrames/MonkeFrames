@@ -12,6 +12,8 @@
 		<ItemGroup>
 			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Compiler.dll" />
 			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Editor.dll" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\ffmpeg\ffmpeg.exe" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\Misc\README.txt" />
 		</ItemGroup>
 
 		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(SolutionDir)Build\latest\tmp\BepInEx\plugins\MonkeFrames"/>
