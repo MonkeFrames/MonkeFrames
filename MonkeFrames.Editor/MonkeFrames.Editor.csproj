@@ -46,7 +46,7 @@
       <EmbeddedResource Include="Resources/MFintroLogo.png">
         <LogicalName>introLogo</LogicalName>
       </EmbeddedResource>
-	    <EmbeddedResource Include="Resources/MFCamera.glb">
+	    <EmbeddedResource Include="Resources/MFCamera.obj">
 		    <LogicalName>spectatorCamObj</LogicalName>
 	    </EmbeddedResource>
       <EmbeddedResource Include="Resources/MFCamera.png">
