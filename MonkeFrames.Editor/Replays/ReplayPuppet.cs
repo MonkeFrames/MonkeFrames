@@ -167,7 +167,7 @@ public static class PuppetBuilder
         }
 
         HashSet<Renderer> worn = WornRenderers(rig);
-        foreach (Renderer r in src.GetComponentsInChildren<Renderer>(true))
+        foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
         {
             if (!Include(r, worn))
                 continue;
@@ -226,7 +226,7 @@ public static class PuppetBuilder
     /// </summary>
     private static bool Include(Renderer r, HashSet<Renderer> worn)
     {
-        if (r == null || (!r.gameObject.activeInHierarchy && !worn.Contains(r)))
+        if (r == null || !r.gameObject.activeInHierarchy)
             return false;
         if (r is not SkinnedMeshRenderer && r is not MeshRenderer)
             return false;
@@ -274,7 +274,7 @@ public static class PuppetBuilder
         var added = new List<string>();
         HashSet<Renderer> worn = WornRenderers(rig);
 
-        foreach (Renderer r in src.GetComponentsInChildren<Renderer>(true))
+        foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
         {
             if (!Include(r, worn)) continue;
             string path = PathOf(r.transform, src);
@@ -323,6 +323,8 @@ public static class PuppetBuilder
                     Renderer r = t.GetComponent<SkinnedMeshRenderer>();
                     if (r == null) r = t.GetComponent<MeshRenderer>();
                     if (r == null) continue;
+                    // Name tags would show someone else's name: skip them.
+                    if (r.GetComponent<TMP_Text>() != null) break;
                     if (CopyRenderer(ctx, r, path, source)) break;
                 }
             }
@@ -465,37 +467,17 @@ public static class PuppetBuilder
         if (r is MeshRenderer mr)
         {
             MeshFilter mf = mr.GetComponent<MeshFilter>();
-            Transform node = Node(ctx, path);
-
-            // fix for nametags not appearing
-            TMP_Text sourceText = mr.GetComponent<TMP_Text>();
-            if (sourceText != null)
-            {
-                TextMeshPro text = node.gameObject.AddComponent<TextMeshPro>();
-                // in theory this should make it so VIM nametags are still golden even when running replays
-                // not tested though, no promises
-                // -binx
-                text.font = sourceText.font;
-                text.fontSize = sourceText.fontSize;
-                text.color = sourceText.color;
-                text.alignment = sourceText.alignment;
-                text.fontStyle = sourceText.fontStyle;
-                text.enableWordWrapping = sourceText.enableWordWrapping;
-                text.overflowMode = sourceText.overflowMode;
-                text.text = ctx.Puppet.Track?.Name ?? "GORILLA"; // this should always resolve but no clue anyway
-                if (sourceText.fontSharedMaterial != null)
-                    text.fontSharedMaterial = sourceText.fontSharedMaterial;
-                Renderer textRenderer = node.GetComponent<Renderer>();
-                if (textRenderer != null)
-                {
-                    textRenderer.shadowCastingMode = mr.shadowCastingMode;
-                    textRenderer.receiveShadows = mr.receiveShadows;
-                }
-                return true;
-            }
-
             if (mf == null || mf.sharedMesh == null) return false;
+
+            Transform node = Node(ctx, path);
             Mesh mesh = mf.sharedMesh;
+
+            // Text (name tags) regenerates its mesh when the text changes, so keep our own copy.
+            if (mr.GetComponent<TMP_Text>() != null)
+            {
+                mesh = Object.Instantiate(mesh);
+                ctx.Puppet.Owned.Add(mesh);
+            }
 
             node.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
             MeshRenderer copy = node.gameObject.AddComponent<MeshRenderer>();
