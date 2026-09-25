@@ -6,8 +6,8 @@
 		</ItemGroup>
 	</Target>
 
-	<Target Name="CopyToBuild" AfterTargets="Build" Condition="'$(CI)' == '' And Exists('$(GamePath)\BepInEx\plugins')">
-		<Copy SourceFiles="$(TargetPath)" DestinationFiles="$(SolutionDir)Build\latest\$(MSBuildProjectName).dll"/>
+	<Target Name="CopyToBuild" AfterTargets="Build" Condition="'$(CI)'=='' And Exists('$(GamePath)\BepInEx\plugins')">
+		<Copy SourceFiles="$(TargetPath)" DestinationFiles="..\Build\latest\$(MSBuildProjectName).dll"/>
 		<Message Text="$(MSBuildProjectName).dll -> Build\latest\$(MSBuildProjectName).dll" Importance="high"/>
 	</Target>
 </Project>

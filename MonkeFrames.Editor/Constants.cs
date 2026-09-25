@@ -13,7 +13,7 @@ public static class Constants
     public const string Name = "MonkeFrames";
     public const string Guid = "dev.sirkingbinx.monkeframes";
     public const string Version = "2.0";
-    public static readonly string VersionID = $"{Version} Beta 1";
+    public static readonly string VersionID = $"{Version}";
 
     private static string _buildDate;
     public static string BuildDate
