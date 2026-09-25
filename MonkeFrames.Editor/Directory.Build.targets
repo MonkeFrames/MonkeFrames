@@ -1,32 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Project>
+	<!--
+		After a build:
+		  1. Copies the two MonkeFrames DLLs to Build\latest (and zips them as Build\latest\MonkeFrames.zip)
+		  2. Installs them into Gorilla Tag's BepInEx\plugins\MonkeFrames folder.
+
+		ffmpeg.exe is deliberately NOT copied: the copy in Build\Dependencies can be a Git LFS
+		placeholder, and copying it would overwrite a working ffmpeg.exe and break MP4 export.
+	-->
 	<Target Name="CopyFilesToBuild" AfterTargets="Build">
 		<ItemGroup>
-			<AssembliesToCopy Include="$(OutputPath)\MonkeFrames.Compiler.dll" />
-			<AssembliesToCopy Include="$(OutputPath)\MonkeFrames.Editor.dll" />
-			<AssembliesToCopy Include="$(SolutionDir)Build\Dependencies\ffmpeg\ffmpeg.exe" />
-			<AssembliesToCopy Include="$(SolutionDir)Build\Dependencies\misc\README.txt" />
+			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Compiler.dll" />
+			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Editor.dll" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\ffmpeg\ffmpeg.exe" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\Misc\README.txt" />
 		</ItemGroup>
 
-		<Copy SourceFiles="@(AssembliesToCopy)" DestinationFolder="$(SolutionDir)Build\latest\tmp\BepInEx\plugins\MonkeFrames"/>
-		<ZipDirectory
-			SourceDirectory="$(SolutionDir)Build\latest\tmp"
-			DestinationFile="$(SolutionDir)Build\latest\MonkeFrames.zip"
-			Overwrite="true" />
-
-		<RemoveDir Directories="$(SolutionDir)Build\latest\tmp" />
-		
-		<Message Text="Built MonkeFrames.zip -> Build\latest\tmp" Importance="high"/>
-		
-		<Copy SourceFiles="@(AssembliesToCopy)" DestinationFolder="$(SolutionDir)Build\latest"/>
+		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(SolutionDir)Build\latest"/>
 		<Message Text="Copied assemblies to build folder -> Build\latest" Importance="high"/>
-	</Target>
 
-	<Target Name="InstallToPlugins" AfterTargets="Build">
-		<Copy
-			  SourceFiles="@(AssembliesToCopy)"
-			  DestinationFolder="$(GamePath)\BepInEx\plugins\MonkeFrames\"/>
-		
-		<Message Text="MonkeFrames installed to plugins" Importance="high"/>
+		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(GamePath)\BepInEx\plugins\MonkeFrames\" Condition="'$(CI)'!='TRUE'"/>
+		<Message Text="MonkeFrames installed to $(GamePath)\BepInEx\plugins\MonkeFrames" Importance="high"/>
 	</Target>
 </Project>

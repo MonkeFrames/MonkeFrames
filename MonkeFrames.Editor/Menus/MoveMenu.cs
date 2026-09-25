@@ -7,9 +7,9 @@ namespace MonkeFrames.Editor.Menus;
 
 using Keyframe = MonkeFrames.Compiler.Models.Keyframe;
 
-public class GoMenu : IEditorMenu
+public class MoveMenu : IEditorMenu
 {
-    public string Name => "Go";
+    public string Name => "Move";
     public int Index => 2;
 
     [EditorMenuItem("To Gorilla")]
@@ -22,7 +22,7 @@ public class GoMenu : IEditorMenu
         CameraManager.Instance.Rotation = Quaternion.Euler(headRot);
     }
 
-    [EditorMenuItem("To Selected Keyframe")]
+    [EditorMenuItem("To Selected Keyframe", Shortcut = "F")]
     public void ToSelectedKeyframe()
     {
         if (UIManager.Instance.Selection == -1)

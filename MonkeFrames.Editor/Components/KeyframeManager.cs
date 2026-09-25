@@ -73,19 +73,24 @@ public class KeyframeManager : MonoBehaviour
         if (CameraManager.Instance.InPlayback)
             return;
 
+        // Don't treat typing in a text field (keyframe values, room codes...) as shortcuts.
+        if (GUIUtility.keyboardControl != 0)
+            return;
+
+        // In Replay Studio, keyframes are placed at the replay playhead and deleting keeps timing.
+        var studio = Replays.ReplayStudio.Instance;
+        bool inStudio = studio != null && studio.Active;
+
         if (Keyboard.current.vKey.wasPressedThisFrame)
-            CreateKeyframe();
-
-        if (Keyboard.current.fKey.wasPressedThisFrame)
         {
-            if (UIManager.Instance.Selection == -1)
-                return;
+            if (inStudio) studio.AddKeyframeAtPlayhead();
+            else CreateKeyframe();
+        }
 
-            Keyframe k = Project.Keyframes[UIManager.Instance.Selection];
-            
-            CameraManager.Instance.Position = k.Position;
-            CameraManager.Instance.Rotation = k.QuatRotation;
-            CameraManager.Instance.FieldOfView = k.FieldOfView;
+        if (Keyboard.current.fKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
+        {
+            if (inStudio) studio.GoTo(UIManager.Instance.Selection);
+            else GoToKeyframe(UIManager.Instance.Selection);
         }
 
         if (Keyboard.current.tKey.wasPressedThisFrame)
@@ -95,7 +100,24 @@ public class KeyframeManager : MonoBehaviour
             CreateKeyframe(replaceKeyframeIdx: UIManager.Instance.Selection);
 
         if (Keyboard.current.deleteKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
-            DeleteKeyframe(UIManager.Instance.Selection);
+        {
+            if (inStudio) studio.DeleteKeyframe(UIManager.Instance.Selection);
+            else DeleteKeyframe(UIManager.Instance.Selection);
+        }
+    }
+
+    /// <summary>Move the camera to a keyframe's position, rotation and FOV.</summary>
+    public void GoToKeyframe(int index)
+    {
+        if (index < 0 || index >= Project.Keyframes.Count)
+            return;
+
+        Keyframe k = Project.Keyframes[index];
+
+        CameraManager.Instance.CancelLookSmoothing();
+        CameraManager.Instance.Position = k.Position;
+        CameraManager.Instance.Rotation = k.QuatRotation;
+        CameraManager.Instance.FieldOfView = k.FieldOfView;
     }
 
     public void LoadProject(Project p)
@@ -103,6 +125,7 @@ public class KeyframeManager : MonoBehaviour
         UIManager.Instance.Selection = -1;
         Project = p;
         RefreshOrbs();
+        ObjectManager.Instance?.SyncWithProject();
     }
 
     public bool IsCompiling;
@@ -130,6 +153,11 @@ public class KeyframeManager : MonoBehaviour
 
     public Keyframe CreateKeyframe(int replaceKeyframeIdx = -1, bool lookAtPlayer = false)
     {
+        return CreateKeyframeCore(replaceKeyframeIdx, lookAtPlayer);
+    }
+
+    private Keyframe CreateKeyframeCore(int replaceKeyframeIdx, bool lookAtPlayer)
+    {
         Keyframe k = new Keyframe();
 
         k.Position = CameraManager.Instance.Position;
@@ -144,8 +172,18 @@ public class KeyframeManager : MonoBehaviour
 
         k.Transition.Duration = 5f;
 
+        if (Settings.current?.SmoothByDefault == true)
+            k.Transition.Effect = TransitionEffect.Smooth;
+
         if (replaceKeyframeIdx != -1)
         {
+            // Replacing a keyframe keeps its timing and transition; only the camera changes.
+            Keyframe old = Project.Keyframes[replaceKeyframeIdx];
+            k.Transition = old.Transition;
+            k.MotionBlur = old.MotionBlur;
+            k.MotionBlurStrength = old.MotionBlurStrength;
+
+            try { Objects[old].Destroy(); Objects.Remove(old); } catch { }
             Project.Keyframes.RemoveAt(replaceKeyframeIdx);
             Project.Keyframes.Insert(replaceKeyframeIdx, k);
         } else
@@ -166,12 +204,15 @@ public class KeyframeManager : MonoBehaviour
 
     public void DeleteKeyframe(int index)
     {
-        try {
-            Objects[Project.Keyframes[index]].Destroy();
-            Objects.Remove(Project.Keyframes[index]);
-            Project.Keyframes.RemoveAt(index);
-        } catch { };
-        // UIManager.Instance.SelectedKeyframeIndex = -1;
+        if (Project == null || index < 0 || index >= Project.Keyframes.Count)
+            return;
+
+        Keyframe keyframe = Project.Keyframes[index];
+        if (Objects.TryGetValue(keyframe, out GameObject orb))
+            orb.Destroy();
+        Objects.Remove(keyframe);
+        Project.Keyframes.RemoveAt(index);
+        UIManager.Instance.Selection = Mathf.Min(index, Project.Keyframes.Count - 1);
     }
 
     public void DeleteOrbs()

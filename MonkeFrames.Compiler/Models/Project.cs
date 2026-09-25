@@ -31,16 +31,39 @@ public class Project
     public List<Keyframe> Keyframes { get; set; }
 
     /// <summary>
-    /// FPS of the project. Can be either 30 or 60.
+    /// Spawned 3D objects associated with the project.
+    /// </summary>
+    public List<PlacedObject> PlacedObjects { get; set; }
+
+    private int _fps = 60;
+
+    /// <summary>
+    /// Frames-per-second generated during compilation.
     /// </summary>
     public int FPS {
-        get => field;
+        get => _fps;
         set {
-            if (value is 30 or 60 or 120)
-                field = value;
+            if (Array.IndexOf(SupportedFPS, value) >= 0)
+                _fps = value;
             else
-                throw new ArgumentException("FPS must be either 30, 60, or 120.", nameof(value));
+                throw new ArgumentException($"FPS must be one of: {string.Join(", ", SupportedFPS)}.", nameof(value));
         }
+    }
+
+    /// <summary>
+    /// Frame rates a project can use.
+    /// </summary>
+    public static readonly int[] SupportedFPS = [24, 30, 48, 50, 60, 90, 120, 144, 165, 240, 300, 360];
+
+    private float _smoothness = 1f;
+
+    /// <summary>
+    /// The amount of smoothing applied to compiled keyframes.
+    /// </summary>
+    public float Smoothness
+    {
+        get => _smoothness;
+        set => _smoothness = Math.Clamp(value, 0f, 1.5f);
     }
 
     /// <summary>
@@ -80,5 +103,6 @@ public class Project
         Exporter = projectExporter;
         FPS = 60;
         Keyframes = new List<Keyframe>();
+        PlacedObjects = new List<PlacedObject>();
     }
 }

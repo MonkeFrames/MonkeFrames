@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFramework>netstandard2.1</TargetFramework>
 	      <PlatformTarget>x64</PlatformTarget>
@@ -43,6 +43,19 @@
       <EmbeddedResource Include="Resources/MFiconTitlebar.png">
         <LogicalName>icon</LogicalName>
       </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFintroLogo.png">
+        <LogicalName>introLogo</LogicalName>
+      </EmbeddedResource>
+	    <EmbeddedResource Include="Resources/MFCamera.obj">
+		    <LogicalName>spectatorCamObj</LogicalName>
+	    </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFCamera.png">
+        <LogicalName>spectatorCamTex</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+      <None Include="Menus\MoveMenu.cs" />
     </ItemGroup>
 
     <ItemGroup>

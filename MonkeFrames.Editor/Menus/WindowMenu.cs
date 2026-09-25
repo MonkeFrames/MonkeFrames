@@ -7,20 +7,13 @@ namespace MonkeFrames.Editor.Menus;
 public class WindowMenu : IEditorMenu
 {
     public string Name => "Window";
-    public int Index => 1;
+    public int Index => 3;
 
     [EditorMenuItem("Keyframe Editor")]
     public void KeyframeManager()
     {
         UIManager.Instance.ToggleWindow("Keyframe Editor");
     }
-
-    [EditorMenuItem("Player")]
-    public void Player()
-    {
-        UIManager.Instance.ToggleWindow("Player");
-    }
-
 
     [EditorMenuItem("Room Manager")]
     public void RoomManager()
@@ -32,5 +25,17 @@ public class WindowMenu : IEditorMenu
     public void MapLoader()
     {
         UIManager.Instance.ToggleWindow("Environment Manager");
+    }
+
+    [EditorMenuItem("Object Manager")]
+    public void ObjectManager()
+    {
+        UIManager.Instance.ToggleWindow("Object Manager");
+    }
+
+    [EditorMenuItem("Keyframe Player")]
+    public void Player()
+    {
+        UIManager.Instance.ToggleWindow("Player");
     }
 }

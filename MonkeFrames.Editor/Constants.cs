@@ -1,3 +1,4 @@
+using GorillaNetworking;
 using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Utilities;
 using System;
@@ -11,19 +12,20 @@ namespace MonkeFrames.Editor;
 public static class Constants
 {
     public const string Name = "MonkeFrames";
-    public const string Guid = "bingus.monkeframes";
-    public const string Version = "1.2";
+    public const string Guid = "dev.sirkingbinx.monkeframes";
+    public const string Version = "2.0";
     public static readonly string VersionID = $"{Version}";
 
+    private static string _buildDate;
     public static string BuildDate
     {
         get
         {
-            field ??= Assembly.GetExecutingAssembly()
+            _buildDate ??= Assembly.GetExecutingAssembly()
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(attr => attr.Key == "BuildTime")?.Value;
 
-            return field;
+            return _buildDate;
         }
     }
 
@@ -35,7 +37,7 @@ public static class Constants
     {
         DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
 
-        string[] folders = ["projects", "exports"];
+        string[] folders = ["projects", "exports", "replays", "objects"];
         foreach (string folder in folders)
             Directory.CreateDirectory(SystemUtilities.Combine(DataFolder, folder));
 
@@ -46,6 +48,8 @@ public static class Constants
     {
         {"SirKingBinx", "Developer" },
         {"uhJames", "Developer" },
+        {"YourBoiAlex", "Developer" },
+        {"Olibobs", "Developer" },
         {"", "" },
         {"MrNubbaWubington", "Tester" },
         {"nebwella", "Tester" },
@@ -78,7 +82,6 @@ public static class Constants
         {"swmb", "Tester" },
         {"tehbaconvr", "Tester" },
         {"Violet", "Tester" },
-        {"YourBoiAlex", "Tester" },
         {"Gobo", "Tester" },
         {"Atlantic", "Tester" },
         {"Cap", "Tester" },
