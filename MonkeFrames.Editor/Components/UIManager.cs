@@ -202,6 +202,8 @@ public class UIManager : MonoBehaviour
             return;
         }
 
+        HandleControlShortcuts();
+
         CloseMenuOnOutsideClick();
         DrawMenuBar();
 
@@ -216,6 +218,38 @@ public class UIManager : MonoBehaviour
         IntroScreen.Draw();
 
         GUI.skin = prevSkin;
+    }
+
+    /// <summary>Dispatch menu shortcuts marked with ^ as Control combinations.</summary>
+    private void HandleControlShortcuts()
+    {
+        Event e = Event.current;
+        if (e == null || e.type != EventType.KeyDown || !e.control || GUIUtility.keyboardControl != 0)
+            return;
+
+        string key = e.keyCode.ToString();
+        foreach (IEditorMenuManager menu in Menus)
+        {
+            foreach (var item in menu.Items)
+            {
+                if (string.IsNullOrEmpty(item.Shortcut) || item.Shortcut.Length != 2 || item.Shortcut[0] != '^'
+                    || !string.Equals(item.Shortcut.Substring(1), key, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    item.Action();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[MonkeFrames::Menu] \"{item.Name}\" shortcut failed: {ex.InnerException?.Message ?? ex.Message}");
+                }
+
+                CurrentMenuIndex = -1;
+                e.Use();
+                return;
+            }
+        }
     }
 
     // ---------------- Menu bar ----------------

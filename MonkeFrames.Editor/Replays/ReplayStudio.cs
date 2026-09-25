@@ -250,6 +250,12 @@ public class ReplayStudio : MonoBehaviour
     /// <summary>Add a keyframe from the current camera exactly at the replay playhead.</summary>
     public void AddKeyframeAtPlayhead()
     {
+        if (RM?.Clip == null) return;
+        KeyframeEditHistory.Execute(AddKeyframeAtPlayheadCore);
+    }
+
+    private void AddKeyframeAtPlayheadCore()
+    {
         ReplayManager rm = RM;
         if (rm?.Clip == null) return;
 
@@ -327,6 +333,12 @@ public class ReplayStudio : MonoBehaviour
     /// <summary>Delete a keyframe without moving the others in time.</summary>
     public void DeleteKeyframe(int i)
     {
+        if (i < 0 || i >= Keys.Count || RM?.Clip == null) return;
+        KeyframeEditHistory.Execute(() => DeleteKeyframeCore(i));
+    }
+
+    private void DeleteKeyframeCore(int i)
+    {
         List<Keyframe> keys = Keys;
         if (i < 0 || i >= keys.Count) return;
 
@@ -341,6 +353,33 @@ public class ReplayStudio : MonoBehaviour
         RM.Clip.Dirty = true;
         KM.RefreshOrbs();
         UIManager.Instance.Status = $"Deleted keyframe {i}.";
+    }
+
+    /// <summary>Insert a clipboard keyframe after the selected replay keyframe.</summary>
+    public void InsertPastedKeyframe(Keyframe keyframe)
+    {
+        ReplayManager rm = RM;
+        if (rm?.Clip == null) return;
+
+        List<Keyframe> keys = Keys;
+        int selection = UIManager.Instance.Selection;
+        int insertAt = selection >= 0 && selection < keys.Count ? selection + 1 : keys.Count;
+
+        if (insertAt > 0 && insertAt < keys.Count)
+        {
+            Keyframe previous = keys[insertAt - 1];
+            float oldDuration = previous.Transition.Duration;
+            float firstHalf = Mathf.Max(0.02f, oldDuration * 0.5f);
+            previous.Transition.Duration = firstHalf;
+            keys[insertAt - 1] = previous;
+            keyframe.Transition.Duration = Mathf.Max(0.02f, oldDuration - firstHalf);
+        }
+
+        keys.Insert(insertAt, keyframe);
+        UIManager.Instance.Selection = insertAt;
+        rm.Clip.Dirty = true;
+        KM.RefreshOrbs();
+        UIManager.Instance.Status = $"Pasted keyframe {insertAt} into the replay timeline.";
     }
 
     /// <summary>Move keyframe i to replay time t, keeping every other keyframe where it is.</summary>
@@ -1096,6 +1135,7 @@ public class ReplayStudio : MonoBehaviour
 
                 if (_dragKey >= 0)
                 {
+                    KeyframeEditHistory.BeginEdit();
                     UIManager.Instance.Selection = _dragKey;
                     _dragStartX = e.mousePosition.x;
                     _dragTimes = times;
@@ -1141,9 +1181,12 @@ public class ReplayStudio : MonoBehaviour
                 GUIUtility.hotControl = 0;
                 if (_dragKey >= 0 && _dragMoved)
                 {
+                    KeyframeEditHistory.CommitEdit();
                     KM.RefreshOrbs();
                     UIManager.Instance.Status = $"Keyframe {_dragKey} moved to {ReplayManager.FormatTime(KeyTimes()[_dragKey])}.";
                 }
+                else
+                    KeyframeEditHistory.CancelEdit();
                 _dragKey = -1;
                 _scrubbing = false;
                 e.Use();
