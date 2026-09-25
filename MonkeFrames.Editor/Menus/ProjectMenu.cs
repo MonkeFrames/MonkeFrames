@@ -7,7 +7,7 @@ namespace MonkeFrames.Editor.Menus;
 public class ProjectMenu : IEditorMenu
 {
     public string Name => "Project";
-    public int Index => 8;
+    public int Index => 7;
 
     [EditorMenuItem("Project Settings")]
     public void OpenProjectSettings()

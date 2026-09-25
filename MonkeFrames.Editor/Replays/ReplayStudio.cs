@@ -251,7 +251,7 @@ public class ReplayStudio : MonoBehaviour
     public void AddKeyframeAtPlayhead()
     {
         if (RM?.Clip == null) return;
-        KeyframeEditHistory.Execute(AddKeyframeAtPlayheadCore);
+        AddKeyframeAtPlayheadCore();
     }
 
     private void AddKeyframeAtPlayheadCore()
@@ -334,7 +334,7 @@ public class ReplayStudio : MonoBehaviour
     public void DeleteKeyframe(int i)
     {
         if (i < 0 || i >= Keys.Count || RM?.Clip == null) return;
-        KeyframeEditHistory.Execute(() => DeleteKeyframeCore(i));
+        DeleteKeyframeCore(i);
     }
 
     private void DeleteKeyframeCore(int i)
@@ -1135,7 +1135,6 @@ public class ReplayStudio : MonoBehaviour
 
                 if (_dragKey >= 0)
                 {
-                    KeyframeEditHistory.BeginEdit();
                     UIManager.Instance.Selection = _dragKey;
                     _dragStartX = e.mousePosition.x;
                     _dragTimes = times;
@@ -1181,12 +1180,9 @@ public class ReplayStudio : MonoBehaviour
                 GUIUtility.hotControl = 0;
                 if (_dragKey >= 0 && _dragMoved)
                 {
-                    KeyframeEditHistory.CommitEdit();
                     KM.RefreshOrbs();
                     UIManager.Instance.Status = $"Keyframe {_dragKey} moved to {ReplayManager.FormatTime(KeyTimes()[_dragKey])}.";
                 }
-                else
-                    KeyframeEditHistory.CancelEdit();
                 _dragKey = -1;
                 _scrubbing = false;
                 e.Use();

@@ -122,7 +122,6 @@ public class KeyframeManager : MonoBehaviour
 
     public void LoadProject(Project p)
     {
-        KeyframeEditHistory.ResetHistory();
         UIManager.Instance.Selection = -1;
         Project = p;
         RefreshOrbs();
@@ -154,9 +153,7 @@ public class KeyframeManager : MonoBehaviour
 
     public Keyframe CreateKeyframe(int replaceKeyframeIdx = -1, bool lookAtPlayer = false)
     {
-        Keyframe result = default;
-        KeyframeEditHistory.Execute(() => result = CreateKeyframeCore(replaceKeyframeIdx, lookAtPlayer));
-        return result;
+        return CreateKeyframeCore(replaceKeyframeIdx, lookAtPlayer);
     }
 
     private Keyframe CreateKeyframeCore(int replaceKeyframeIdx, bool lookAtPlayer)
@@ -210,15 +207,12 @@ public class KeyframeManager : MonoBehaviour
         if (Project == null || index < 0 || index >= Project.Keyframes.Count)
             return;
 
-        KeyframeEditHistory.Execute(() =>
-        {
-            Keyframe keyframe = Project.Keyframes[index];
-            if (Objects.TryGetValue(keyframe, out GameObject orb))
-                orb.Destroy();
-            Objects.Remove(keyframe);
-            Project.Keyframes.RemoveAt(index);
-            UIManager.Instance.Selection = Mathf.Min(index, Project.Keyframes.Count - 1);
-        });
+        Keyframe keyframe = Project.Keyframes[index];
+        if (Objects.TryGetValue(keyframe, out GameObject orb))
+            orb.Destroy();
+        Objects.Remove(keyframe);
+        Project.Keyframes.RemoveAt(index);
+        UIManager.Instance.Selection = Mathf.Min(index, Project.Keyframes.Count - 1);
     }
 
     public void DeleteOrbs()

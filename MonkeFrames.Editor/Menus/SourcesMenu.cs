@@ -7,7 +7,7 @@ namespace MonkeFrames.Editor.Menus;
 public class SourcesMenu : IEditorMenu
 {
     public string Name => "Sources";
-    public int Index => 6;
+    public int Index => 5;
 
     [EditorMenuItem("Open Sources")]
     public void Open() => UIManager.Instance.OpenWindow("Sources");

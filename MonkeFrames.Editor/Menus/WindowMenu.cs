@@ -7,7 +7,7 @@ namespace MonkeFrames.Editor.Menus;
 public class WindowMenu : IEditorMenu
 {
     public string Name => "Window";
-    public int Index => 4;
+    public int Index => 3;
 
     [EditorMenuItem("Keyframe Editor")]
     public void KeyframeManager()
