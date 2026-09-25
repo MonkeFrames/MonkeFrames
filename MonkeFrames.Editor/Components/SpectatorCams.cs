@@ -27,7 +27,7 @@ public class SpectatorCams : MonoBehaviour
     private const float Magic = 7719f;
     private const float SendInterval = 1f / 20f;
     private const double Delay = 0.11;           // interpolation delay (a little over two packets)
-    public const float ModelScale = 0.7f;
+    public const float ModelScale = 0.35f;
 
     internal sealed class Snap { public double Time; public Vector3 Pos; public Quaternion Rot; }
 
@@ -411,7 +411,7 @@ public static class CamModel
             Texture2D t = new Texture2D(2, 2, TextureFormat.RGBA32, true);
             if (!t.LoadImage(bytes, false)) return null;
             t.wrapMode = TextureWrapMode.Clamp;
-            t.filterMode = FilterMode.Trilinear;
+            t.filterMode = FilterMode.Point;
             t.anisoLevel = 4;
             return t;
         }
@@ -531,6 +531,7 @@ public static class CamModel
         GameObject body = new GameObject("Body");
         body.layer = 0;
         body.transform.SetParent(root.transform, false);
+        body.transform.localRotation = Quaternion.Euler(180, 0, 0);
         body.transform.localScale = Vector3.one * SpectatorCams.ModelScale;
 
         Mesh mesh = Mesh;

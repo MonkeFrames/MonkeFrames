@@ -19,7 +19,7 @@
 		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(SolutionDir)Build\latest"/>
 		<Message Text="Copied assemblies to build folder -> Build\latest" Importance="high"/>
 
-		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(GamePath)\BepInEx\plugins\MonkeFrames\"/>
+		<Copy SourceFiles="@(MonkeFramesDlls)" DestinationFolder="$(GamePath)\BepInEx\plugins\MonkeFrames\" Condition="'$(CI)'!='TRUE'"/>
 		<Message Text="MonkeFrames installed to $(GamePath)\BepInEx\plugins\MonkeFrames" Importance="high"/>
 	</Target>
 </Project>

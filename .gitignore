@@ -421,3 +421,5 @@ Build/latest/MonkeFrames.zip
 Build/latest/README.txt
 
 !/MonkeFrames.Editor/Resources/MFCamera.obj
+Libs/
+.DS_Store
