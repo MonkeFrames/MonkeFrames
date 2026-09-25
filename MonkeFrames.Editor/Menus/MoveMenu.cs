@@ -10,7 +10,7 @@ using Keyframe = MonkeFrames.Compiler.Models.Keyframe;
 public class MoveMenu : IEditorMenu
 {
     public string Name => "Move";
-    public int Index => 3;
+    public int Index => 2;
 
     [EditorMenuItem("To Gorilla")]
     public void ToGorilla()
