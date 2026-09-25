@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Interfaces;
+using MonkeFrames.Editor.Replays;
 using MonkeFrames.Editor.UI;
 using MonkeFrames.Editor.Utilities;
 using UnityEngine;
@@ -295,6 +296,27 @@ public class UIManager : MonoBehaviour
             }
 
             x += w + 2;
+        }
+
+        // replay recording indicator
+        // this code is fuckin ugly
+        float replayRecording = Anim.To("bar.replayrecording", ReplayManager.Instance?.Recording == true ? 1f : 0f, 14f);
+        if (replayRecording > 0.01f)
+        {
+            Color prevC = GUI.color;
+
+            GUI.color = new Color(1, 1, 1, prevC.a * replayRecording);
+            Rect chip = new Rect(Screen.width - 735 + (1f - replayRecording) * 12f, 6, 172, MenuBarHeight - 12);
+            Color red = new Color(0.95f, 0.19f, 0.17f);
+
+            Theme.Fill(chip, red.WithAlpha(0.22f), 9);
+
+            float pulse = 0.65f + 0.35f * Mathf.Sin(Time.unscaledTime * 3f);
+
+            Theme.Dot(new Vector2(chip.x + 12, chip.center.y), 3.5f, red.WithAlpha(pulse));
+            Theme.DrawText(new Rect(chip.x + 20, chip.y, chip.width - 22, chip.height), "RECORDING REPLAY", Theme.LabelCenterSmall, red);
+            
+            GUI.color = prevC;
         }
 
         // Smooth-look indicator (Caps Lock)
