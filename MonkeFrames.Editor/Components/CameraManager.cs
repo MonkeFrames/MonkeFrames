@@ -6,8 +6,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Unity.Cinemachine;
 using UnityEngine;
@@ -78,6 +80,8 @@ public class CameraManager : MonoBehaviour
 
     private void LateUpdate()
     {
+        CompleteFfmpegExportIfReady();
+
         if (Keyboard.current.f1Key.wasPressedThisFrame && CinemachineState)
             SetModEnabled(true);
 
@@ -332,7 +336,23 @@ public class CameraManager : MonoBehaviour
     public BinaryWriter frameStream;
     public Process ffmpegProcess;
     private string exportAudioPath;
+    private string exportOutputPath;
     private Task<string> ffmpegErrorTask;
+    private Task ffmpegProgressTask;
+    private Task<ExportResult> ffmpegWaitTask;
+    private int ffmpegProgressAmount;
+    private int exportFrameCount;
+
+    private sealed class ExportResult
+    {
+        public int ExitCode;
+        public string Error;
+    }
+
+    public bool Exporting => doRecording || ffmpegWaitTask != null;
+    public float ExportProgress => doRecording
+        ? (playbackEnding > 0 ? Mathf.Clamp01(playbackPosition / (float)playbackEnding) : 0f)
+        : Mathf.Clamp01(Interlocked.CompareExchange(ref ffmpegProgressAmount, 0, 0) / 1000f);
 
     public string outputMp4 => Path.Combine(Constants.DataFolder, "exports", KeyframeManager.Instance.Project.Name + ".mp4");
 
@@ -363,33 +383,14 @@ public class CameraManager : MonoBehaviour
                     yield break;
                 }
 
-                UIManager.Instance.Status = "Finishing encoding..";
-
-                frameStream.Flush();
-                frameStream.Close();
+                UIManager.Instance.Status = "Encoding video...";
+                try { frameStream?.Close(); } catch { }
                 frameStream = null;
-
-                ffmpegProcess.WaitForExit();
-                int ffmpegExitCode = ffmpegProcess.ExitCode;
-                string ffmpegError = ffmpegErrorTask?.Result ?? "";
-                ffmpegProcess.Dispose();
-                ffmpegProcess = null;
-                ffmpegErrorTask = null;
-                CleanupExportAudio();
 
                 renderTexture.Release();
                 Destroy(renderTexture);
-
-                if (ffmpegExitCode != 0)
-                {
-                    UIManager.Instance.Status = "MP4 export failed: " + (string.IsNullOrWhiteSpace(ffmpegError)
-                        ? $"ffmpeg exited with code {ffmpegExitCode}."
-                        : ffmpegError.Trim());
-                    yield break;
-                }
-
-                Process.Start("explorer.exe", $"/select,\"{outputMp4}\"");
-                UIManager.Instance.Status = $"Exported {outputMp4}";
+                renderTexture = null;
+                StartFfmpegCompletionTask();
                 yield break;
             }
 
@@ -418,7 +419,6 @@ public class CameraManager : MonoBehaviour
                 try
                 {
                     frameStream.Write(rBuffer, 0, rBuffer.Length);
-                    frameStream.Flush();
                 }
                 catch (IOException ex)
                 {
@@ -431,7 +431,6 @@ public class CameraManager : MonoBehaviour
                     yield break;
                 }
 
-                Console.WriteLine($"Ffmpeg encode ... Flush frame {playbackPosition + 1}");
             }
             
             if (doRecording)
@@ -455,8 +454,11 @@ public class CameraManager : MonoBehaviour
 
     public void StartRecording()
     {
+        if (Exporting) return;
         renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
         rBuffer = new byte[Screen.width * Screen.height * 4];
+        exportFrameCount = KeyframeManager.Instance.Project.CompiledKeyframes.Count;
+        Interlocked.Exchange(ref ffmpegProgressAmount, 0);
 
         StartFfmpegEncoder();
         doRecording = true;
@@ -466,6 +468,7 @@ public class CameraManager : MonoBehaviour
     public void StartFfmpegEncoder()
     {
         var project = KeyframeManager.Instance.Project;
+        exportOutputPath = outputMp4;
         string audioInput = "";
         string audioOptions = "";
 
@@ -495,7 +498,8 @@ public class CameraManager : MonoBehaviour
         // were after the output path and did not affect the selected encoder.
         string arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " + audioInput +
                            $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " + audioOptions +
-                           $"-y \"{outputMp4}\"";
+                           $"-progress pipe:1 -stats_period 0.25 -nostats " +
+                           $"-y \"{exportOutputPath}\"";
 
         Console.WriteLine($"Arguments: {arguments}");
 
@@ -508,16 +512,79 @@ public class CameraManager : MonoBehaviour
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardInput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            RedirectStandardOutput = true
         });
 
         ffmpegErrorTask = ffmpegProcess.StandardError.ReadToEndAsync();
+        ffmpegProgressTask = Task.Run(() => ReadFfmpegProgress(ffmpegProcess));
 
         frameStream = new BinaryWriter(ffmpegProcess.StandardInput.BaseStream);
+    }
 
-        Task.Run(() => {
-            Win32Utilities.ShowMessageDialog("MonkeFrames Editor", "Your video is currently being processed. Please wait for the UI to appear before continuing.");
+    private void ReadFfmpegProgress(Process process)
+    {
+        string line;
+        while ((line = process.StandardOutput.ReadLine()) != null)
+        {
+            if (line.StartsWith("frame=", StringComparison.Ordinal)
+                && int.TryParse(line.Substring(6).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int frame))
+            {
+                int progressInt = exportFrameCount > 0
+                    ? (int)Math.Round(frame * 1000d / exportFrameCount)
+                    : 0;
+                Interlocked.Exchange(ref ffmpegProgressAmount, Math.Max(0, Math.Min(999, progressInt)));
+            }
+        }
+    }
+
+    private void StartFfmpegCompletionTask()
+    {
+        Process process = ffmpegProcess;
+        Task<string> errorTask = ffmpegErrorTask;
+        Task progressTask = ffmpegProgressTask;
+        ffmpegWaitTask = Task.Run(() =>
+        {
+            process.WaitForExit();
+            progressTask?.GetAwaiter().GetResult();
+            return new ExportResult
+            {
+                ExitCode = process.ExitCode,
+                Error = errorTask?.GetAwaiter().GetResult() ?? ""
+            };
         });
+    }
+
+    private void CompleteFfmpegExportIfReady()
+    {
+        Task<ExportResult> task = ffmpegWaitTask;
+        if (task == null || !task.IsCompleted) return;
+
+        ExportResult result = null;
+        try { result = task.GetAwaiter().GetResult(); }
+        catch (Exception ex) { result = new ExportResult { ExitCode = -1, Error = ex.Message }; }
+
+        ffmpegWaitTask = null;
+        try { ffmpegProcess?.Dispose(); } catch { }
+        ffmpegProcess = null;
+        ffmpegErrorTask = null;
+        ffmpegProgressTask = null;
+        CleanupExportAudio();
+        Interlocked.Exchange(ref ffmpegProgressAmount, 1000);
+        string path = exportOutputPath;
+        exportOutputPath = null;
+
+        if (result.ExitCode != 0)
+        {
+            UIManager.Instance.Status = "MP4 export failed: " + (string.IsNullOrWhiteSpace(result.Error)
+                ? $"ffmpeg exited with code {result.ExitCode}."
+                : result.Error.Trim());
+            return;
+        }
+
+        try { Process.Start("explorer.exe", $"/select,\"{path}\""); }
+        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Export] Could not open exported video location: {ex.Message}"); }
+        UIManager.Instance.Status = $"Exported {path}";
     }
 
     private void CleanupExportAudio()
@@ -532,12 +599,18 @@ public class CameraManager : MonoBehaviour
     {
         try { frameStream?.Close(); } catch { }
         frameStream = null;
-        try { ffmpegProcess?.WaitForExit(); } catch { }
-        string details = ffmpegErrorTask?.Result ?? "";
-        try { ffmpegProcess?.Dispose(); } catch { }
-        ffmpegProcess = null;
-        ffmpegErrorTask = null;
-        CleanupExportAudio();
+        Process process = ffmpegProcess;
+        Task<string> errorTask = ffmpegErrorTask;
+        Task progressTask = ffmpegProgressTask;
+        try { process?.Kill(); } catch { }
+        ffmpegWaitTask = Task.Run(() =>
+        {
+            try { process?.WaitForExit(); } catch { }
+            try { progressTask?.GetAwaiter().GetResult(); } catch { }
+            string details = "";
+            try { details = errorTask?.GetAwaiter().GetResult() ?? ""; } catch { }
+            return new ExportResult { ExitCode = -1, Error = string.IsNullOrWhiteSpace(details) ? cause.Message : details.Trim() };
+        });
 
         if (renderTexture != null)
         {
@@ -552,9 +625,7 @@ public class CameraManager : MonoBehaviour
         Blur.Set(false, 0f);
         UIManager.Instance.Drawing = true;
         KeyframeManager.Instance.RefreshOrbs();
-        UIManager.Instance.Status = "MP4 export failed: " + (string.IsNullOrWhiteSpace(details)
-            ? cause.Message
-            : details.Trim());
+        UIManager.Instance.Status = "MP4 export failed: " + cause.Message;
     }
 
     public void StartPlayback()

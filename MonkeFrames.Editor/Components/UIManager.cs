@@ -298,6 +298,19 @@ public class UIManager : MonoBehaviour
             x += w + 2;
         }
 
+        CameraManager cameraManager = CameraManager.Instance;
+        if (cameraManager != null && cameraManager.Exporting)
+        {
+            Rect chip = new Rect(Screen.width - 925, 6, 184, MenuBarHeight - 12);
+            Theme.Fill(chip, Theme.Accent.WithAlpha(0.18f), 9);
+            Theme.DrawText(new Rect(chip.x + 5, chip.y, chip.width - 10, chip.height),
+                $"BUILDING VIDEO  {cameraManager.ExportProgress * 100f:0}%", Theme.LabelCenterSmall, Theme.Text);
+            Rect track = new Rect(chip.x + 8, chip.yMax - 3, chip.width - 16, 2);
+            Theme.Fill(track, Theme.Border, 1);
+            if (cameraManager.ExportProgress > 0f)
+                Theme.Fill(new Rect(track.x, track.y, track.width * cameraManager.ExportProgress, track.height), Theme.Accent, 1);
+        }
+
         // replay recording indicator
         // this code is fuckin ugly
         float replayRecording = Anim.To("bar.replayrecording", ReplayManager.Instance?.Recording == true ? 1f : 0f, 14f);
