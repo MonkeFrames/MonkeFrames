@@ -27,7 +27,7 @@ public class SpectatorCams : MonoBehaviour
     private const float Magic = 7719f;
     private const float SendInterval = 1f / 20f;
     private const double Delay = 0.11;           // interpolation delay (a little over two packets)
-    public const float ModelScale = 0.7f;
+    public const float ModelScale = 0.35f;
 
     internal sealed class Snap { public double Time; public Vector3 Pos; public Quaternion Rot; }
 
@@ -387,7 +387,7 @@ public static class CamModel
         catch { return null; }
     }
 
-    private static Texture2D _albedo, _rgb;
+    private static Texture2D _albedo;
     private static bool _texturesLoaded;
     private static readonly Dictionary<Color32, Material> _materials = new();
 
@@ -531,6 +531,7 @@ public static class CamModel
         GameObject body = new GameObject("Body");
         body.layer = 0;
         body.transform.SetParent(root.transform, false);
+        body.transform.localRotation = Quaternion.Euler(0, 180, 0);
         body.transform.localScale = Vector3.one * SpectatorCams.ModelScale;
 
         Mesh mesh = Mesh;
@@ -891,10 +892,8 @@ public static class CamModel
             {
                 Mesh bodyMesh = Mesh;
                 _ = BodyMaterial(tint); // loads the textures
-                if (bodyMesh != null && HasUVs && _rgb != null)
+                if (bodyMesh != null && HasUVs)
                 {
-                    _glowTight = BlurredMask(_rgb, 256, 2, 2);
-                    _glowWide = BlurredMask(_rgb, 64, 3, 3);
                     _glowMeshInner = GlowShell(bodyMesh, _glowWide, 0.003f);
                     _glowMeshOuter = GlowShell(bodyMesh, _glowWide, 0.014f);
                 }

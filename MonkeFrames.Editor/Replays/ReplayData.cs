@@ -20,7 +20,7 @@ public sealed class AudioBlock
 public sealed class ReplayClip
 {
     public const int Magic = 0x5052464D; // "MFRP"
-    public const int FileVersion = 2;   // 2: spectator cameras
+    public const int FileVersion = 3;   // 2: spectator cameras, 3: recorded cosmetic IDs
 
     public string Name = "Replay";
     public DateTime Created = DateTime.Now;
@@ -127,7 +127,7 @@ public sealed class ReplayClip
             return c;
 
         for (int i = 0; i < tracks; i++)
-            c.Tracks.Add(ReplayTrack.Read(r));
+            c.Tracks.Add(ReplayTrack.Read(r, version));
 
         if (version >= 2)
         {
@@ -160,6 +160,9 @@ public sealed class ReplayTrack
     public string[] Paths = Array.Empty<string>();
     /// <summary>Visible meshes at the time of recording (used to rebuild the gorilla after loading).</summary>
     public string[] RendererPaths = Array.Empty<string>();
+    public string[] CosmeticIds = Array.Empty<string>();
+    /// <summary>Cosmetic ID for each RendererPaths entry, empty for non-cosmetic renderers.</summary>
+    public string[] RendererCosmeticIds = Array.Empty<string>();
     public string HeadPath = "", LeftHandPath = "", RightHandPath = "", MainSkinPath = "";
 
     public int StartFrame;
@@ -374,6 +377,8 @@ public sealed class ReplayTrack
         w.Write(HeadPath ?? ""); w.Write(LeftHandPath ?? ""); w.Write(RightHandPath ?? ""); w.Write(MainSkinPath ?? "");
         w.Write(StartFrame);
         w.Write(FrameCount);
+        WriteStrings(w, CosmeticIds);
+        WriteStrings(w, RendererCosmeticIds);
         w.Write(_len);
         w.Write(_data, 0, _len);
 
@@ -395,7 +400,7 @@ public sealed class ReplayTrack
         w.Write(VoiceVolume);
     }
 
-    public static ReplayTrack Read(BinaryReader r)
+    public static ReplayTrack Read(BinaryReader r, int version)
     {
         ReplayTrack t = new ReplayTrack
         {
@@ -412,6 +417,12 @@ public sealed class ReplayTrack
             StartFrame = r.ReadInt32(),
             FrameCount = r.ReadInt32(),
         };
+
+        if (version >= 3)
+        {
+            t.CosmeticIds = ReadStrings(r);
+            t.RendererCosmeticIds = ReadStrings(r);
+        }
 
         t._len = r.ReadInt32();
         if (t._len < 0 || t.FrameCount < 0 || t._len != t.FrameCount * t.FrameSize)

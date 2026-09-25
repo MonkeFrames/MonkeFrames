@@ -886,6 +886,12 @@ public class ReplayManager : MonoBehaviour
 
     private void FinishLoad(ReplayClip clip)
     {
+        StartCoroutine(FinishLoadRoutine(clip));
+    }
+
+    private System.Collections.IEnumerator FinishLoadRoutine(ReplayClip clip)
+    {
+        bool loaded = false;
         try
         {
             if (Viewing) StopViewing();
@@ -893,24 +899,24 @@ public class ReplayManager : MonoBehaviour
 
             VRRig model = CameraModes.LocalRig();
             foreach (ReplayTrack t in clip.Tracks)
-                PuppetBuilder.BuildFromSaved(t, model);
+            {
+                ReplayPuppet puppet = PuppetBuilder.BuildFromSaved(t, model);
+                if (model != null)
+                    yield return StartCoroutine(PuppetBuilder.LoadCosmetics(t, puppet, model));
+            }
 
             Clip = clip;
             Time = clip.In;
             Playing = false;
             StartViewing();
             UIManager.Instance.Status = $"Loaded \"{clip.Name}\".";
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[MonkeFrames::Replay] Load failed: {ex}");
-            UIManager.Instance.Status = "Couldn't load that replay: " + ex.Message;
-            if (Clip != clip)
-                foreach (ReplayTrack t in clip.Tracks)
-                    DestroyTrackObjects(t);
+            loaded = true;
         }
         finally
         {
+            if (!loaded && Clip != clip)
+                foreach (ReplayTrack t in clip.Tracks)
+                    DestroyTrackObjects(t);
             _busy = false;
         }
     }

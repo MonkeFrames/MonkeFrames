@@ -2,6 +2,10 @@ using MonkeFrames.Editor.Components;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.AddressableAssets;
+using GorillaNetworking;
+using GorillaTag.CosmeticSystem;
+using System.Collections;
 
 namespace MonkeFrames.Editor.Replays;
 
@@ -16,6 +20,7 @@ public class ReplayPuppet : CamSubject
     public Transform HeadNode, LeftHandNode, RightHandNode;
 
     internal readonly List<Object> Owned = new();   // copied materials / meshes to clean up
+    internal readonly List<GameObject> AddressableCosmetics = new();
     internal PuppetBuilder.Ctx BuildCtx;            // lets us add cosmetics that load after recording starts
 
     public override string DisplayName => Track?.Name ?? "Gorilla";
@@ -32,6 +37,9 @@ public class ReplayPuppet : CamSubject
     /// <summary>Free copied materials / meshes (OnDestroy isn't called for objects that were never active).</summary>
     public void ReleaseOwned()
     {
+        foreach (GameObject instance in AddressableCosmetics)
+            if (instance != null) Addressables.ReleaseInstance(instance);
+        AddressableCosmetics.Clear();
         foreach (Object o in Owned)
             if (o != null)
                 Destroy(o);
@@ -146,6 +154,8 @@ public static class PuppetBuilder
         Ctx ctx = Begin(track, src);
 
         var rendererPaths = new List<string>();
+        var rendererCosmeticIds = new List<string>();
+        var cosmeticByRenderer = CosmeticRendererIds(rig);
         var moving = new List<Transform>();
         var movingSet = new HashSet<Transform>();
 
@@ -179,6 +189,7 @@ public static class PuppetBuilder
             if (CopyRenderer(ctx, r, path, src))
             {
                 rendererPaths.Add(path);
+                rendererCosmeticIds.Add(cosmeticByRenderer.TryGetValue(r, out string cosmeticId) ? cosmeticId : "");
                 if (r is MeshRenderer)
                     AddMoving(r.transform);   // e.g. held items or cosmetics that move on their own
                 if (r is SkinnedMeshRenderer smr)
@@ -199,10 +210,28 @@ public static class PuppetBuilder
         if (rh != null) AddMoving(rh);
 
         track.RendererPaths = rendererPaths.ToArray();
+        track.RendererCosmeticIds = rendererCosmeticIds.ToArray();
         track.HeadPath = PathOf(head, src) ?? "";
         track.LeftHandPath = PathOf(lh, src) ?? "";
         track.RightHandPath = PathOf(rh, src) ?? "";
         track.MainSkinPath = rig.mainSkin != null ? PathOf(rig.mainSkin.transform, src) ?? "" : "";
+        track.CosmeticIds = CosmeticIds(rig);
+
+        // Replay pose data must include the skeleton anchors cosmetics attach to, even when
+        // those anchors do not happen to be bones of one of the captured renderers.
+        try
+        {
+            if (GTHardCodedBones.TryGetBoneXforms(rig, out Transform[] boneXforms, out _))
+                foreach (CosmeticInfoV2 info in CosmeticInfos(track.CosmeticIds))
+                    foreach (CosmeticPart part in CosmeticParts(info))
+                        if (part.attachAnchors != null)
+                            foreach (CosmeticAttachInfo anchor in part.attachAnchors)
+                            {
+                                int index = GTHardCodedBones.GetBoneIndex(anchor.parentBone);
+                                if (index >= 0 && index < boneXforms.Length) AddMoving(boneXforms[index]);
+                            }
+        }
+        catch (System.Exception ex) { System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic anchors unavailable while recording: {ex.Message}"); }
 
         var paths = new List<string>();
         var live = new List<Transform>();
@@ -260,6 +289,98 @@ public static class PuppetBuilder
         return set;
     }
 
+    private static string[] CosmeticIds(VRRig rig)
+    {
+        var ids = new List<string>();
+        try
+        {
+            foreach (var item in rig.cosmeticSet.items)
+                if (!string.IsNullOrEmpty(item.displayName) && !ids.Contains(item.displayName))
+                    ids.Add(item.displayName);
+        }
+        catch { }
+        return ids.ToArray();
+    }
+
+    private static IEnumerable<CosmeticInfoV2> CosmeticInfos(IEnumerable<string> ids)
+    {
+        CosmeticsController controller = CosmeticsController.instance;
+        if (controller == null || ids == null) yield break;
+        foreach (string id in ids)
+        {
+            CosmeticSO so = controller.GetCosmeticSOFromDisplayName(id);
+            if (so != null) yield return so.info;
+        }
+    }
+
+    private static IEnumerable<CosmeticPart> CosmeticParts(CosmeticInfoV2 info)
+    {
+        if (info.holdableParts != null) foreach (var part in info.holdableParts) yield return part;
+        if (info.wardrobeParts != null) foreach (var part in info.wardrobeParts) yield return part;
+        if (info.storeParts != null) foreach (var part in info.storeParts) yield return part;
+        if (info.functionalParts != null) foreach (var part in info.functionalParts) yield return part;
+    }
+
+    /// <summary>Instantiate the actual game cosmetic prefabs on the replay's matching bone anchors.</summary>
+    public static IEnumerator LoadCosmetics(ReplayTrack track, ReplayPuppet puppet, VRRig rig)
+    {
+        if (track?.CosmeticIds == null || puppet == null || rig == null)
+            yield break;
+        if (!GTHardCodedBones.TryGetBoneXforms(rig, out Transform[] sourceBones, out string error))
+        {
+            if (!string.IsNullOrEmpty(error)) System.Console.WriteLine($"[MonkeFrames::Replay] Could not resolve cosmetic anchors: {error}");
+            yield break;
+        }
+
+        foreach (CosmeticInfoV2 info in CosmeticInfos(track.CosmeticIds))
+        foreach (CosmeticPart part in CosmeticParts(info))
+        {
+            if (part.prefabAssetRef == null || part.attachAnchors == null) continue;
+            foreach (CosmeticAttachInfo attach in part.attachAnchors)
+            {
+                int boneIndex = GTHardCodedBones.GetBoneIndex(attach.parentBone);
+                if (boneIndex < 0 || boneIndex >= sourceBones.Length || sourceBones[boneIndex] == null) continue;
+
+                string bonePath = PathOf(sourceBones[boneIndex], rig.transform);
+                if (string.IsNullOrEmpty(bonePath)) continue;
+                Transform parent = Node(puppet.BuildCtx, bonePath);
+                var operation = part.prefabAssetRef.InstantiateAsync(parent, true);
+                while (!operation.IsDone) yield return null;
+                GameObject instance = operation.Result;
+                if (instance == null)
+                {
+                    System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic prefab failed to load: {info.displayName}");
+                    continue;
+                }
+
+                instance.transform.SetParent(parent, false);
+                instance.transform.localPosition = attach.offset.pos;
+                instance.transform.localRotation = attach.offset.rot;
+                instance.transform.localScale = attach.offset.scale;
+                puppet.AddressableCosmetics.Add(instance);
+            }
+        }
+    }
+
+    private static Dictionary<Renderer, string> CosmeticRendererIds(VRRig rig)
+    {
+        var result = new Dictionary<Renderer, string>();
+        try
+        {
+            var registry = rig.cosmeticsObjectRegistry;
+            foreach (var item in rig.cosmeticSet.items)
+            {
+                if (string.IsNullOrEmpty(item.displayName)) continue;
+                var cosmetic = registry != null ? registry.Cosmetic(item.displayName) : null;
+                if (cosmetic?.allRenderers == null) continue;
+                foreach (Renderer renderer in cosmetic.allRenderers)
+                    if (renderer != null) result[renderer] = item.displayName;
+            }
+        }
+        catch { }
+        return result;
+    }
+
     /// <summary>
     /// While recording: copy any cosmetics that appeared after the gorilla was first seen
     /// (cosmetics load in a moment after someone joins, or they change outfit).
@@ -272,7 +393,9 @@ public static class PuppetBuilder
         Transform src = rig.transform;
         var known = new HashSet<string>(track.RendererPaths);
         var added = new List<string>();
+        var addedCosmeticIds = new List<string>();
         HashSet<Renderer> worn = WornRenderers(rig);
+        var cosmeticByRenderer = CosmeticRendererIds(rig);
 
         foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
         {
@@ -283,6 +406,7 @@ public static class PuppetBuilder
             {
                 known.Add(path);
                 added.Add(path);
+                addedCosmeticIds.Add(cosmeticByRenderer.TryGetValue(r, out string cosmeticId) ? cosmeticId : "");
             }
         }
 
@@ -291,6 +415,9 @@ public static class PuppetBuilder
             var all = new List<string>(track.RendererPaths);
             all.AddRange(added);
             track.RendererPaths = all.ToArray();
+            var allCosmeticIds = new List<string>(track.RendererCosmeticIds);
+            allCosmeticIds.AddRange(addedCosmeticIds);
+            track.RendererCosmeticIds = allCosmeticIds.ToArray();
         }
         return added.Count;
     }
@@ -303,19 +430,37 @@ public static class PuppetBuilder
     {
         Transform src = model != null ? model.transform : null;
         Ctx ctx = Begin(track, src);
-        if (src != null) ctx.Sources.Add(src);
+        var matchingSources = new List<Transform>();
+        var otherSources = new List<Transform>();
+        if (src != null) otherSources.Add(src);
         try
         {
             foreach (VRRig other in VRRigCache.Instance.GetAllRigs())
                 if (other != null && other.transform != src)
-                    ctx.Sources.Add(other.transform);
+                {
+                    bool hasRecordedCosmetic = false;
+                    string[] wornIds = CosmeticIds(other);
+                    foreach (string id in track.CosmeticIds)
+                        if (System.Array.IndexOf(wornIds, id) >= 0) { hasRecordedCosmetic = true; break; }
+                    (hasRecordedCosmetic ? matchingSources : otherSources).Add(other.transform);
+                }
         }
         catch { }
 
+        // A path can exist on every gorilla. Prefer the rig that actually wears one of the
+        // recorded IDs so a local hat or shirt can never be substituted for the replay item.
+        ctx.Sources.AddRange(matchingSources);
+        ctx.Sources.AddRange(otherSources);
+
         if (ctx.Sources.Count > 0)
         {
-            foreach (string path in track.RendererPaths)
+            for (int rendererIndex = 0; rendererIndex < track.RendererPaths.Length; rendererIndex++)
             {
+                string path = track.RendererPaths[rendererIndex];
+                string requiredCosmetic = rendererIndex < track.RendererCosmeticIds.Length ? track.RendererCosmeticIds[rendererIndex] : "";
+                // Recorded cosmetics are instantiated from their saved game asset below. Never
+                // substitute another rig's renderer at the same hierarchy path.
+                if (!string.IsNullOrEmpty(requiredCosmetic)) continue;
                 foreach (Transform source in ctx.Sources)
                 {
                     Transform t = Find(source, path);
