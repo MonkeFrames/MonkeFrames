@@ -469,9 +469,7 @@ public class CameraManager : MonoBehaviour
     {
         var project = KeyframeManager.Instance.Project;
         exportOutputPath = outputMp4;
-        string audioInput = "";
-        string audioOptions = "";
-
+        bool hasVoiceAudio = false;
         ReplayManager replay = ReplayManager.Instance;
         if (replay != null && replay.Viewing && replay.SyncWithKeyframes
             && ReplayVoiceExporter.HasAudibleVoice(replay.Clip))
@@ -481,8 +479,7 @@ public class CameraManager : MonoBehaviour
                 exportAudioPath = Path.Combine(Path.GetTempPath(), $"MonkeFrames-voice-{Guid.NewGuid():N}.wav");
                 ReplayVoiceExporter.WriteWav(exportAudioPath, replay.Clip,
                     project.CompiledKeyframes.Count, project.FPS, replay.Speed, replay.VoiceVolume);
-                audioInput = $"-i \"{exportAudioPath}\" ";
-                audioOptions = "-c:a aac -b:a 192k -shortest ";
+                hasVoiceAudio = true;
             }
             catch (Exception ex)
             {
@@ -492,14 +489,46 @@ public class CameraManager : MonoBehaviour
             }
         }
 
+        bool hasMusicAudio = !string.IsNullOrEmpty(project.AudioPath) && File.Exists(project.AudioPath);
+
         Console.WriteLine("==== FFMPEG ENCODE STATS ====");
 
-        // Preserve the known-good software encoder settings. The prior trailing hardware options
-        // were after the output path and did not affect the selected encoder.
-        string arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " + audioInput +
-                           $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " + audioOptions +
-                           $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                           $"-y \"{exportOutputPath}\"";
+        string arguments;
+        if (hasVoiceAudio && hasMusicAudio)
+        {
+            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
+                        $"-i \"{exportAudioPath}\" -ss {project.AudioStartTime:0.00} -i \"{project.AudioPath}\" " +
+                        $"-filter_complex \"[1:a][2:a]amix=inputs=2:duration=first[aout]\" -map 0:v -map \"[aout]\" " +
+                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
+                        $"-c:a aac -b:a 192k -shortest " +
+                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
+                        $"-y \"{exportOutputPath}\"";
+        }
+        else if (hasVoiceAudio)
+        {
+            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
+                        $"-i \"{exportAudioPath}\" " +
+                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
+                        $"-c:a aac -b:a 192k -shortest " +
+                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
+                        $"-y \"{exportOutputPath}\"";
+        }
+        else if (hasMusicAudio)
+        {
+            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
+                        $"-ss {project.AudioStartTime:0.00} -i \"{project.AudioPath}\" " +
+                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
+                        $"-c:a aac -b:a 192k -shortest " +
+                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
+                        $"-y \"{exportOutputPath}\"";
+        }
+        else
+        {
+            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
+                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
+                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
+                        $"-y \"{exportOutputPath}\"";
+        }
 
         Console.WriteLine($"Arguments: {arguments}");
 

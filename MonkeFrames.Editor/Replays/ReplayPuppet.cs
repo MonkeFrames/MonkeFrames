@@ -1,11 +1,12 @@
-using MonkeFrames.Editor.Components;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
 using GorillaNetworking;
 using GorillaTag.CosmeticSystem;
-using System.Collections;
+using MonkeFrames.Editor.Components;
 
 namespace MonkeFrames.Editor.Replays;
 
@@ -19,7 +20,7 @@ public class ReplayPuppet : CamSubject
     public Transform[] Parts = System.Array.Empty<Transform>();
     public Transform HeadNode, LeftHandNode, RightHandNode;
 
-    internal readonly List<Object> Owned = new();   // copied materials / meshes to clean up
+    internal readonly List<UnityEngine.Object> Owned = new();   // copied materials / meshes to clean up
     internal readonly List<GameObject> AddressableCosmetics = new();
     internal PuppetBuilder.Ctx BuildCtx;            // lets us add cosmetics that load after recording starts
 
@@ -40,7 +41,7 @@ public class ReplayPuppet : CamSubject
         foreach (GameObject instance in AddressableCosmetics)
             if (instance != null) Addressables.ReleaseInstance(instance);
         AddressableCosmetics.Clear();
-        foreach (Object o in Owned)
+        foreach (UnityEngine.Object o in Owned)
             if (o != null)
                 Destroy(o);
         Owned.Clear();
@@ -61,7 +62,7 @@ public static class PuppetBuilder
             if (_container == null)
             {
                 GameObject go = new GameObject("MonkeFrames Replay Gorillas");
-                Object.DontDestroyOnLoad(go);
+                UnityEngine.Object.DontDestroyOnLoad(go);
                 _container = go.transform;
             }
             return _container;
@@ -308,8 +309,32 @@ public static class PuppetBuilder
         if (controller == null || ids == null) yield break;
         foreach (string id in ids)
         {
+            if (string.IsNullOrEmpty(id)) continue;
             CosmeticSO so = controller.GetCosmeticSOFromDisplayName(id);
-            if (so != null) yield return so.info;
+            if (so != null)
+            {
+                yield return so.info;
+                continue;
+            }
+
+            if (controller.TryGetCosmeticInfoV2(id, out CosmeticInfoV2 info))
+            {
+                yield return info;
+                continue;
+            }
+
+            if (controller.v2_allCosmetics != null)
+            {
+                foreach (CosmeticInfoV2 v2 in controller.v2_allCosmetics)
+                {
+                    if (string.Equals(v2.displayName, id, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(v2.playFabID, id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        yield return v2;
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -332,33 +357,112 @@ public static class PuppetBuilder
             yield break;
         }
 
+        var loadedCosmeticIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         foreach (CosmeticInfoV2 info in CosmeticInfos(track.CosmeticIds))
-        foreach (CosmeticPart part in CosmeticParts(info))
         {
-            if (part.prefabAssetRef == null || part.attachAnchors == null) continue;
-            foreach (CosmeticAttachInfo attach in part.attachAnchors)
+            bool loadedAnyPart = false;
+            foreach (CosmeticPart part in CosmeticParts(info))
             {
-                int boneIndex = GTHardCodedBones.GetBoneIndex(attach.parentBone);
-                if (boneIndex < 0 || boneIndex >= sourceBones.Length || sourceBones[boneIndex] == null) continue;
-
-                string bonePath = PathOf(sourceBones[boneIndex], rig.transform);
-                if (string.IsNullOrEmpty(bonePath)) continue;
-                Transform parent = Node(puppet.BuildCtx, bonePath);
-                var operation = part.prefabAssetRef.InstantiateAsync(parent, true);
-                while (!operation.IsDone) yield return null;
-                GameObject instance = operation.Result;
-                if (instance == null)
+                if (part.prefabAssetRef == null || part.attachAnchors == null) continue;
+                foreach (CosmeticAttachInfo attach in part.attachAnchors)
                 {
-                    System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic prefab failed to load: {info.displayName}");
-                    continue;
-                }
+                    int boneIndex = GTHardCodedBones.GetBoneIndex(attach.parentBone);
+                    if (boneIndex < 0 || boneIndex >= sourceBones.Length || sourceBones[boneIndex] == null) continue;
 
-                instance.transform.SetParent(parent, false);
-                instance.transform.localPosition = attach.offset.pos;
-                instance.transform.localRotation = attach.offset.rot;
-                instance.transform.localScale = attach.offset.scale;
-                puppet.AddressableCosmetics.Add(instance);
+                    string bonePath = PathOf(sourceBones[boneIndex], rig.transform);
+                    if (string.IsNullOrEmpty(bonePath)) continue;
+                    Transform parent = Node(puppet.BuildCtx, bonePath);
+                    var operation = part.prefabAssetRef.InstantiateAsync(parent, true);
+                    while (!operation.IsDone) yield return null;
+                    GameObject instance = operation.Result;
+                    if (instance == null)
+                    {
+                        System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic prefab failed to load: {info.displayName}");
+                        continue;
+                    }
+
+                    instance.transform.SetParent(parent, false);
+                    instance.transform.localPosition = attach.offset.pos;
+                    instance.transform.localRotation = attach.offset.rot;
+                    instance.transform.localScale = attach.offset.scale;
+                    puppet.AddressableCosmetics.Add(instance);
+                    loadedAnyPart = true;
+
+                    // Disable physical collisions & interactions on cosmetic instances
+                    foreach (Collider col in instance.GetComponentsInChildren<Collider>(true)) col.enabled = false;
+                    foreach (Rigidbody rb in instance.GetComponentsInChildren<Rigidbody>(true)) rb.isKinematic = true;
+
+                    // Rebind any SkinnedMeshRenderers (clothing, shirts, badges) to puppet bones
+                    RebindSkinnedMeshes(puppet.BuildCtx, instance);
+                }
             }
+            if (loadedAnyPart && !string.IsNullOrEmpty(info.displayName))
+                loadedCosmeticIds.Add(info.displayName);
+        }
+
+        // Fallback for non-Addressable cosmetics or cosmetics without asset refs:
+        // Copy their saved renderer paths from available rigs in the scene
+        if (track.RendererPaths != null && track.RendererCosmeticIds != null && puppet.BuildCtx != null)
+        {
+            for (int i = 0; i < track.RendererPaths.Length; i++)
+            {
+                string cosmeticId = i < track.RendererCosmeticIds.Length ? track.RendererCosmeticIds[i] : "";
+                if (string.IsNullOrEmpty(cosmeticId) || loadedCosmeticIds.Contains(cosmeticId)) continue;
+
+                string path = track.RendererPaths[i];
+                if (puppet.BuildCtx.Nodes.ContainsKey(path)) continue;
+
+                foreach (Transform source in puppet.BuildCtx.Sources)
+                {
+                    Transform t = Find(source, path);
+                    if (t == null) continue;
+                    Renderer r = t.GetComponent<SkinnedMeshRenderer>() ?? (Renderer)t.GetComponent<MeshRenderer>();
+                    if (r == null || r.GetComponent<TMP_Text>() != null) continue;
+                    if (CopyRenderer(puppet.BuildCtx, r, path, source)) break;
+                }
+            }
+        }
+    }
+
+    private static void RebindSkinnedMeshes(Ctx ctx, GameObject instance)
+    {
+        if (ctx == null || instance == null) return;
+        foreach (SkinnedMeshRenderer smr in instance.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+        {
+            if (smr.bones == null || smr.bones.Length == 0) continue;
+            Transform[] remapped = new Transform[smr.bones.Length];
+            for (int b = 0; b < smr.bones.Length; b++)
+            {
+                if (smr.bones[b] == null) continue;
+                string bName = smr.bones[b].name;
+                foreach (var kv in ctx.Nodes)
+                {
+                    if (kv.Value != null && kv.Value.name == bName)
+                    {
+                        remapped[b] = kv.Value;
+                        break;
+                    }
+                }
+            }
+            smr.bones = remapped;
+
+            if (smr.rootBone != null)
+            {
+                string rName = smr.rootBone.name;
+                foreach (var kv in ctx.Nodes)
+                {
+                    if (kv.Value != null && kv.Value.name == rName)
+                    {
+                        smr.rootBone = kv.Value;
+                        break;
+                    }
+                }
+            }
+            if (smr.rootBone == null && remapped.Length > 0 && remapped[0] != null)
+                smr.rootBone = remapped[0];
+
+            smr.updateWhenOffscreen = true;
         }
     }
 
@@ -418,6 +522,11 @@ public static class PuppetBuilder
             var allCosmeticIds = new List<string>(track.RendererCosmeticIds);
             allCosmeticIds.AddRange(addedCosmeticIds);
             track.RendererCosmeticIds = allCosmeticIds.ToArray();
+
+            var currentCosmeticIds = new HashSet<string>(track.CosmeticIds ?? System.Array.Empty<string>());
+            foreach (var id in addedCosmeticIds)
+                if (!string.IsNullOrEmpty(id)) currentCosmeticIds.Add(id);
+            track.CosmeticIds = new List<string>(currentCosmeticIds).ToArray();
         }
         return added.Count;
     }
@@ -565,6 +674,8 @@ public static class PuppetBuilder
         else
         {
             go.layer = parent.gameObject.layer;
+            t.SetLocalPositionAndRotation(Vector3.zero, Quaternion.identity);
+            t.localScale = Vector3.one;
         }
 
         ctx.Nodes[path] = t;
@@ -588,6 +699,18 @@ public static class PuppetBuilder
             {
                 string bp = bones[i] != null && srcRoot != null ? PathOf(bones[i], srcRoot) : null;
                 mapped[i] = bp != null ? Node(ctx, bp) : null;
+                if (mapped[i] == null && bones[i] != null)
+                {
+                    string bName = bones[i].name;
+                    foreach (var kv in ctx.Nodes)
+                    {
+                        if (kv.Value != null && kv.Value.name == bName)
+                        {
+                            mapped[i] = kv.Value;
+                            break;
+                        }
+                    }
+                }
             }
             copy.bones = mapped;
 
@@ -596,12 +719,28 @@ public static class PuppetBuilder
                 string rp = PathOf(smr.rootBone, srcRoot);
                 if (rp != null) copy.rootBone = Node(ctx, rp);
             }
+            if (copy.rootBone == null && smr.rootBone != null)
+            {
+                string rName = smr.rootBone.name;
+                foreach (var kv in ctx.Nodes)
+                {
+                    if (kv.Value != null && kv.Value.name == rName)
+                    {
+                        copy.rootBone = kv.Value;
+                        break;
+                    }
+                }
+            }
+            if (copy.rootBone == null && copy.bones != null && copy.bones.Length > 0)
+                copy.rootBone = copy.bones[0];
 
             copy.localBounds = smr.localBounds;
             copy.updateWhenOffscreen = true;
             copy.quality = smr.quality;
             copy.shadowCastingMode = smr.shadowCastingMode;
             copy.receiveShadows = smr.receiveShadows;
+            copy.forceRenderingOff = false;
+            copy.enabled = true;
 
             if (smr.sharedMesh.blendShapeCount > 0)
                 for (int i = 0; i < smr.sharedMesh.blendShapeCount; i++)
@@ -620,7 +759,7 @@ public static class PuppetBuilder
             // Text (name tags) regenerates its mesh when the text changes, so keep our own copy.
             if (mr.GetComponent<TMP_Text>() != null)
             {
-                mesh = Object.Instantiate(mesh);
+                mesh = UnityEngine.Object.Instantiate(mesh);
                 ctx.Puppet.Owned.Add(mesh);
             }
 
@@ -629,6 +768,8 @@ public static class PuppetBuilder
             copy.sharedMaterials = CopyMaterials(ctx, mr.sharedMaterials);
             copy.shadowCastingMode = mr.shadowCastingMode;
             copy.receiveShadows = mr.receiveShadows;
+            copy.forceRenderingOff = false;
+            copy.enabled = true;
             return true;
         }
 

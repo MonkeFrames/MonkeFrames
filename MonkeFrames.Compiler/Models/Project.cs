@@ -67,6 +67,16 @@ public class Project
     }
 
     /// <summary>
+    /// Path to an audio file (.mp3, .wav, .ogg) to play along with the animation.
+    /// </summary>
+    public string AudioPath { get; set; }
+
+    /// <summary>
+    /// Start time offset in seconds for the audio file.
+    /// </summary>
+    public float AudioStartTime { get; set; }
+
+    /// <summary>
     /// A list of built keyframes for the project for use with cameras.
     /// </summary>
     [JsonIgnore]

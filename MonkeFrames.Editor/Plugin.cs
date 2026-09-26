@@ -36,6 +36,7 @@ public class Plugin : BaseUnityPlugin
         tpc.AddComponent<CameraModes>();
         tpc.AddComponent<ObjectManager>();
         tpc.AddComponent<Replays.ReplayManager>();
+        tpc.AddComponent<Mocap.MocapManager>();
 
         Console.WriteLine("[MonkeFrames::Initialize] All components added");
 

@@ -38,4 +38,10 @@ public class WindowMenu : IEditorMenu
     {
         UIManager.Instance.ToggleWindow("Player");
     }
+
+    [EditorMenuItem("Mocap")]
+    public void Mocap()
+    {
+        UIManager.Instance.ToggleWindow("Mocap");
+    }
 }
