@@ -1,9 +1,10 @@
-using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.UI;
+using MonkeFrames.Editor.Utilities;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using UnityEngine;
 
 namespace MonkeFrames.Editor.Windows;
@@ -39,13 +40,17 @@ public class ObjectManagerWindow : IEditorWindow
             UIManager.Instance.Status = "Refreshed Objects folder.";
         }
 
-        if (GUI.Button(new Rect(w - 214, y - 2, 94, 26), "Open Folder", Theme.AccentButton))
+        if (GUI.Button(new Rect(w - 214, y - 2, 94, 26), "+ Add", Theme.AccentButton))
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = ObjectManager.ObjectsFolder,
-                UseShellExecute = true
-            });
+            string file = Win32Utilities.OpenFile("Select obj file", "Object files|*.obj", SystemUtilities.GetFolder(System.Environment.SpecialFolder.MyDocuments));
+
+            if (string.IsNullOrEmpty(file))
+                return;
+
+            om.EnsureDirectoryExists();
+            File.Copy(file, Path.Combine(ObjectManager.ObjectsFolder, Path.GetFileName(file)));
+            om.SyncWithProject();
+            UIManager.Instance.Status = $"Added {Path.GetFileName(file)} to objects";
         }
         y += 28f;
 

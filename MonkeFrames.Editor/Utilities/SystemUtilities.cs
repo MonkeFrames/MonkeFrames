@@ -31,4 +31,9 @@ public static class SystemUtilities
 
         return final;
     }
+
+    public static string GetFolder(Environment.SpecialFolder folder)
+    {
+        return Environment.GetFolderPath(folder);
+    }
 }
