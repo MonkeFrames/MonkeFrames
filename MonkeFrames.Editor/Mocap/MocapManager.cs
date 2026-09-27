@@ -25,14 +25,7 @@ public class MocapManager : MonoBehaviour
 
     public static string RecordingsFolder
     {
-        get
-        {
-            string root = !string.IsNullOrEmpty(Constants.MonkeFramesAssemblyFolder)
-                ? Constants.MonkeFramesAssemblyFolder
-                : Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
-
-            return Path.Combine(root, "Recordings");
-        }
+        get => Path.Combine(Constants.DataFolder, "mocap");
     }
 
     public float SampleRate = 24f;
