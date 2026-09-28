@@ -81,6 +81,8 @@ public abstract class MFPlugin
 
     /// <summary>
     /// Called when MonkeFrames initially loads your plugin.
+    /// All menu and MFWindow creation should be done here to ensure that they have been created
+    /// by the time that the editor loads your plugin.
     /// </summary>
     public virtual void OnLoad() { }
 

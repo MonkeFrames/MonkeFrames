@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -16,6 +17,7 @@ public class IEditorMenuManager
     public const float DropdownWidth = 230f;
 
     public IEditorMenu Menu;
+    public string Name { get; private set; }
     public List<EditorMenuItem> Items = [];
 
     /// <summary>Where this menu's button sits in the menu bar (set by UIManager each frame).</summary>
@@ -24,6 +26,7 @@ public class IEditorMenuManager
     public IEditorMenuManager(IEditorMenu menu)
     {
         Menu = menu;
+        Name = Menu.Name;
 
         List<MethodInfo> menuItemMethods = Menu.GetType()
             .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
@@ -37,6 +40,28 @@ public class IEditorMenuManager
 
             Items.Add(item);
         }
+    }
+
+    public IEditorMenuManager(string menuName, Dictionary<string, Action> actions)
+    {
+        Menu = null;
+        Name = menuName;
+
+        foreach (var action in actions)
+        {
+            var item = new EditorMenuItem(action.Key);
+            item.Action = action.Value;
+
+            Items.Add(item);
+        }
+    }
+
+    public void AddMenuItem(string itemName, Action callback)
+    {
+        var item = new EditorMenuItem(itemName);
+        item.Action = callback;
+
+        Items.Add(item);
     }
 
     public float DropdownHeight
