@@ -29,14 +29,19 @@
 
     <ItemGroup>
         <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3">
-            <PrivateAssets>all</PrivateAssets>
-            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
 
-		<ProjectReference Include="../MonkeFrames.Compiler/MonkeFrames.Compiler.csproj">
-			<ReferenceOutputAssembly>true</ReferenceOutputAssembly>
-			<IncludeAssets>all</IncludeAssets>
-		</ProjectReference>
+        <ProjectReference Include="../MonkeFrames.Compiler/MonkeFrames.Compiler.csproj">
+          <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+          <IncludeAssets>all</IncludeAssets>
+        </ProjectReference>
+
+        <ProjectReference Include="../MonkeFrames.Plugins/MonkeFrames.Plugins.csproj">
+          <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+          <IncludeAssets>all</IncludeAssets>
+        </ProjectReference>
     </ItemGroup>
 
     <ItemGroup>
@@ -55,16 +60,12 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Include="Menus\MoveMenu.cs" />
-    </ItemGroup>
-
-    <ItemGroup>
-		<Reference Include="BepInEx">
-			<HintPath>$(BepInExAssemblyPath)\BepInEx.dll</HintPath>
-		</Reference>
-		<Reference Include="0Harmony">
-			<HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
-		</Reference>
+      <Reference Include="BepInEx">
+        <HintPath>$(BepInExAssemblyPath)\BepInEx.dll</HintPath>
+      </Reference>
+      <Reference Include="0Harmony">
+        <HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
+      </Reference>
         <Reference Include="AA.Mothership">
           <HintPath>$(GameAssemblyPath)\AA.Mothership.dll</HintPath>
         </Reference>
