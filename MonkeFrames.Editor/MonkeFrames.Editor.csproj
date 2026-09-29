@@ -38,7 +38,7 @@
           <IncludeAssets>all</IncludeAssets>
         </ProjectReference>
 
-        <ProjectReference Include="../MonkeFrames.Plugins/MonkeFrames.Plugins.csproj">
+        <ProjectReference Include="..\MonkeFrames.Plugins\MonkeFrames.Extensions.csproj">
           <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
           <IncludeAssets>all</IncludeAssets>
         </ProjectReference>

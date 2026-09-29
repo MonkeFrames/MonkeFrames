@@ -1,5 +1,5 @@
 <Solution>
   <Project Path="MonkeFrames.Compiler/MonkeFrames.Compiler.csproj" />
   <Project Path="MonkeFrames.Editor/MonkeFrames.Editor.csproj" />
-  <Project Path="MonkeFrames.Plugins/MonkeFrames.Plugins.csproj" />
+  <Project Path="MonkeFrames.Plugins/MonkeFrames.Extensions.csproj" Id="3f57ecf2-24a0-6c39-264f-f6b3ba0ff8b6" />
 </Solution>

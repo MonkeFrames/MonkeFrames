@@ -270,7 +270,7 @@ public class UIManager : MonoBehaviour
             Rect r = new Rect(x, 4, w, MenuBarHeight - 8);
             menu.BarRect = r;
 
-            bool open = CurrentMenuIndex == menu.Menu.Index;
+            bool open = CurrentMenuIndex == menu.Index;
 
             // While a menu is open, hovering another title switches to it (like a desktop menu bar).
             if (CurrentMenuIndex != -1 && !open && r.Contains(Event.current.mousePosition))

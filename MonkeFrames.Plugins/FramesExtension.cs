@@ -6,7 +6,7 @@ namespace MonkeFrames.Plugins;
 /// <summary>
 /// MFPlugin is a base class that all plugins inherit from.
 /// </summary>
-public abstract class MFPlugin
+public abstract class FramesExtension
 {
     /// <summary>
     /// Info provides relevant metadata to MonkeFrames when loading your plugin.
@@ -39,16 +39,16 @@ public abstract class MFPlugin
     /// </summary>
     /// <param name="menuPath">The path to the menu button. Formatted as `Menu Name/Button Text`.</param>
     /// <param name="action">The action to call when the menu button is pressed.</param>
-    public void CreateMenu(string menuPath, Action action)
+    public static void CreateMenu(string menuPath, Action action)
     {
         string[] menuPaths = menuPath.Split("/", StringSplitOptions.RemoveEmptyEntries);
         if (menuPaths.Length != 2)
             throw new ArgumentException("Menu path must be formatted as \"Menu Name/Button Text\"", nameof(menuPath));
     
-        if (!MFPluginManager.Menus.ContainsKey(menuPaths[0].Trim()))
-            MFPluginManager.Menus.Add(menuPaths[0].Trim(), new());
+        if (!ExtensionManager.Menus.ContainsKey(menuPaths[0].Trim()))
+            ExtensionManager.Menus.Add(menuPaths[0].Trim(), new());
         
-        MFPluginManager.Menus[menuPaths[0]].Add(menuPaths[1].Trim(), action);
+        ExtensionManager.Menus[menuPaths[0]].Add(menuPaths[1].Trim(), action);
     }
 
     /// <summary>
@@ -56,12 +56,12 @@ public abstract class MFPlugin
     /// </summary>
     /// <param name="menuPath">The path to the menu button. Formatted as `Menu Name/Button Text`.</param>
     /// <param name="action">The action to call when the menu button is pressed.</param>
-    public MFWindow CreateWindow(string windowName, int sizeX, int sizeY, Action onOpen = null!, Action onClose = null!, Action onDraw = null!)
+    public static FramesWindow CreateWindow(string windowName, int sizeX, int sizeY, Action onOpen = null!, Action onClose = null!, Action onDraw = null!)
     {
-        MFWindow window = new MFWindow(windowName,
+        FramesWindow window = new FramesWindow(windowName,
             new System.Numerics.Vector2(sizeX, sizeY), onOpen, onClose, onDraw);
         
-        MFPluginManager.Windows.Add(window);
+        ExtensionManager.Windows.Add(window);
         return window;
     }
 
@@ -73,7 +73,7 @@ public abstract class MFPlugin
     /// <param name="buttons">The buttons displayed on the message box.</param>
     /// <param name="icon">The icon shown on the message box. This will also play a sound based on icons.</param>
     /// <returns>The user action performed on the message box. If X is pressed, it will return `MessageBoxResult.Cancel`.</returns>
-    public MessageBoxResult ShowMessageBox(string title, string body, MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.None)
+    public static MessageBoxResult ShowMessageBox(string title, string body, MessageBoxButtons buttons = MessageBoxButtons.OK, MessageBoxIcon icon = MessageBoxIcon.None)
     {
         uint flags = (uint)buttons | (uint)icon;
         return (MessageBoxResult)MessageBox(IntPtr.Zero, body, title, flags);

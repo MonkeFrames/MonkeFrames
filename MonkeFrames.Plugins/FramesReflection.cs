@@ -6,7 +6,7 @@ using System.Reflection;
 namespace MonkeFrames.Plugins;
 
 // Vendored from cardboard.sirkingbinx.dev
-public static class MFReflection
+public static class FramesReflection
 {
     /// <summary>
     /// Get all instances of classes that implement interface T.

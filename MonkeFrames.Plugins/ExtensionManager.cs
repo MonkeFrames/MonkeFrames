@@ -6,12 +6,12 @@ using System.Threading.Tasks;
 
 namespace MonkeFrames.Plugins;
 
-public static class MFPluginManager
+public static class ExtensionManager
 {
-    public static Dictionary<MFPlugin.Info, MFPlugin> Plugins = new();
+    public static Dictionary<FramesExtension.Info, FramesExtension> Plugins = new();
 
     public static Dictionary<string, Dictionary<string, Action>> Menus = new();
-    public static List<MFWindow> Windows = new();
+    public static List<FramesWindow> Windows = new();
 
     private static bool IsAssembly(string assemblyPath)
     {
@@ -34,10 +34,12 @@ public static class MFPluginManager
 
     public static void Init()
     {
-        string pluginsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
-        List<Task> loadingTasks = new();
+        string pluginsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "MonkeFrames", "extensions");
 
-        foreach (string pluginAssembly in Directory.EnumerateFiles(pluginsFolder))
+        List<Task> loadingTasks = new();
+        
+        foreach (string pluginAssembly in Directory.EnumerateFiles(pluginsFolder, "*.*"))
         {
             if (!IsAssembly(pluginAssembly))
                 continue;
@@ -51,13 +53,13 @@ public static class MFPluginManager
                 continue;
             }
 
-            List<(MFPlugin.Info, MFPlugin)> plugins =
-                MFReflection.GetInstancesOfTypeWithAttribute<MFPlugin.Info, MFPlugin>(assembly);
+            List<(FramesExtension.Info, FramesExtension)> plugins =
+                FramesReflection.GetInstancesOfTypeWithAttribute<FramesExtension.Info, FramesExtension>(assembly);
             
-            foreach ((MFPlugin.Info, MFPlugin) pluginData in plugins)
+            foreach ((FramesExtension.Info, FramesExtension) pluginData in plugins)
             {
-                MFPlugin.Info metadata = pluginData.Item1;
-                MFPlugin plugin = pluginData.Item2;
+                FramesExtension.Info metadata = pluginData.Item1;
+                FramesExtension plugin = pluginData.Item2;
 
                 Plugins.Add(metadata, plugin);
 

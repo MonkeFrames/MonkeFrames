@@ -16,8 +16,11 @@ public class IEditorMenuManager
     public const float DropdownPadding = 5f;
     public const float DropdownWidth = 230f;
 
+    public static int LastIndex = 0;
+
     public IEditorMenu Menu;
     public string Name { get; private set; }
+    public int Index { get; private set; }
     public List<EditorMenuItem> Items = [];
 
     /// <summary>Where this menu's button sits in the menu bar (set by UIManager each frame).</summary>
@@ -27,6 +30,10 @@ public class IEditorMenuManager
     {
         Menu = menu;
         Name = Menu.Name;
+        Index = Menu.Index;
+
+        if (Index > LastIndex)
+            LastIndex = Index;
 
         List<MethodInfo> menuItemMethods = Menu.GetType()
             .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
@@ -46,6 +53,9 @@ public class IEditorMenuManager
     {
         Menu = null;
         Name = menuName;
+        Index = LastIndex++;
+
+        LastIndex++;
 
         foreach (var action in actions)
         {

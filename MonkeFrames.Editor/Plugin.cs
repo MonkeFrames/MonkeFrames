@@ -3,12 +3,8 @@ using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
 using System;
 using UnityEngine;
-using System.Threading.Tasks;
 using MonkeFrames.Plugins;
 using MonkeFrames.Editor.Utilities;
-
-
-
 
 #if DEBUG
 using System.Runtime.InteropServices;
@@ -51,14 +47,14 @@ public class Plugin : BaseUnityPlugin
 
     public static Action OnMonkeFramesLoaded = () =>
     {
-        Console.WriteLine("[MonkeFrames::Plugins] Initializing plugins...");
+        Console.WriteLine("[MonkeFrames::Extensions] Initializing extensions...");
         
-        MFPluginManager.Init(); // halts thread, don't need an await here
+        ExtensionManager.Init(); // halts thread, don't need an await here
 
-        PluginUtilities.CreateMenus();
-        PluginUtilities.CreateWindows();
+        ExtensionUtilities.CreateMenus();
+        ExtensionUtilities.CreateWindows();
 
-        Console.WriteLine($"[MonkeFrames::Plugins] {MFPluginManager.Plugins.Count} plugins loaded");
+        Console.WriteLine($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
 
         Console.WriteLine($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
 

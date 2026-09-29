@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace MonkeFrames.Plugins;
 
-public class MFWindow
+public class FramesWindow
 {
     public string Name { get; private set; }
 
@@ -24,7 +24,7 @@ public class MFWindow
         Showing = false;
     }
 
-    internal MFWindow(string name, Vector2 size, Action onOpen = null!, Action onClose = null!, Action onDraw = null!)
+    internal FramesWindow(string name, Vector2 size, Action onOpen = null!, Action onClose = null!, Action onDraw = null!)
     {
         Name = name;
         Size = size;

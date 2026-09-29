@@ -1,7 +1,7 @@
-using System;
 using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.UI;
+using System;
 using UnityEngine;
 
 namespace MonkeFrames.Editor.Classes;
@@ -18,6 +18,11 @@ public class IEditorWindowManager
     public Rect WindowPosition;
     public int WindowID;
 
+    public string Name;
+    public Action OnOpen;
+    public Action OnClose;
+    public Action OnDraw;
+
     public bool Visible = false;
     public bool LastVisible = false;
 
@@ -31,6 +36,26 @@ public class IEditorWindowManager
 
         WindowIDs++;
         WindowID = WindowIDs;
+
+        Name = window.Name;
+
+        OnOpen = window.OnOpen;
+        OnClose = window.OnClose;
+        OnDraw = window.OnDraw;
+    }
+
+    public IEditorWindowManager(string name, System.Numerics.Vector2 size, Action onOpen, Action onClose, Action onDraw)
+    {
+        WindowPosition = new Rect(10, 10, size.X, size.Y);
+
+        WindowIDs++;
+        WindowID = WindowIDs;
+
+        Name = name;
+
+        OnOpen = onOpen;
+        OnClose = onClose;
+        OnDraw = onDraw;
     }
 
     /// <summary>Advance the open/close transition. Called once per frame from UIManager.Update.</summary>
@@ -93,7 +118,7 @@ public class IEditorWindowManager
 
         try
         {
-            Window.OnDraw();
+            OnDraw();
         }
         catch (Exception ex)
         {
@@ -110,13 +135,13 @@ public class IEditorWindowManager
         {
             if (Visible)
             {
-                Window.OnOpen();
+                OnOpen();
                 UIManager.Instance.FocusedWindow = WindowID;
                 GUI.BringWindowToFront(WindowID);
             }
             else
             {
-                Window.OnClose();
+                OnClose();
             }
 
             LastVisible = Visible;
