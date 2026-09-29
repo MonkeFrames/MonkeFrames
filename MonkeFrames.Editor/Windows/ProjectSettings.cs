@@ -3,7 +3,7 @@ using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.UI;
 using UnityEngine;
 
-namespace MonkeFrames.Editor.Windows.Project;
+namespace MonkeFrames.Editor.Windows;
 
 public class ProjectSettings : IEditorWindow
 {

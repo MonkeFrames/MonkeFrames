@@ -3,7 +3,7 @@ using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
 using System;
 using UnityEngine;
-using MonkeFrames.Plugins;
+using MonkeFrames.Extensions;
 using MonkeFrames.Editor.Utilities;
 
 #if DEBUG

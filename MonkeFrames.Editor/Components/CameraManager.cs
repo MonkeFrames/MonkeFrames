@@ -2,6 +2,7 @@ using GorillaNetworking;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Replays;
 using MonkeFrames.Editor.Utilities;
+using MonkeFrames.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -459,6 +460,14 @@ public class CameraManager : MonoBehaviour
         rBuffer = new byte[Screen.width * Screen.height * 4];
         exportFrameCount = KeyframeManager.Instance.Project.CompiledKeyframes.Count;
         Interlocked.Exchange(ref ffmpegProgressAmount, 0);
+
+        Task.Run(() =>
+        {
+            FramesExtension.ShowMessageBox(
+                $"[MonkeFrames {Constants.Version}] Encoding",
+                "Your video is encoding. Please wait for the UI to reappear before continuing work.",
+                icon: FramesExtension.MessageBoxIcon.Asterisk);
+        });
 
         StartFfmpegEncoder();
         doRecording = true;

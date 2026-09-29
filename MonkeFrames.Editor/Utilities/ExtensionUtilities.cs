@@ -1,7 +1,7 @@
 using System.Linq;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
-using MonkeFrames.Plugins;
+using MonkeFrames.Extensions;
 
 namespace MonkeFrames.Editor.Utilities;
 

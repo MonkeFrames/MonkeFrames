@@ -1,7 +1,7 @@
 using System;
 using System.Numerics;
 
-namespace MonkeFrames.Plugins;
+namespace MonkeFrames.Extensions;
 
 public class FramesWindow
 {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 
-namespace MonkeFrames.Plugins;
+namespace MonkeFrames.Extensions;
 
 // Vendored from cardboard.sirkingbinx.dev
 public static class FramesReflection

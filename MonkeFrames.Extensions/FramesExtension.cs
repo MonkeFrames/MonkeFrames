@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace MonkeFrames.Plugins;
+namespace MonkeFrames.Extensions;
 
 /// <summary>
 /// MFPlugin is a base class that all plugins inherit from.

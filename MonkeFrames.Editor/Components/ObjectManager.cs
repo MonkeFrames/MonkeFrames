@@ -132,7 +132,7 @@ public class ObjectManager : MonoBehaviour
         }
     }
 
-    public (bool, Texture2D?) TryLoadObjectTexture(string objFileName)
+    public (bool, Texture2D) TryLoadObjectTexture(string objFileName)
     {
         string baseName = Path.GetFileNameWithoutExtension(objFileName);
         string folder = ObjectsFolder;
