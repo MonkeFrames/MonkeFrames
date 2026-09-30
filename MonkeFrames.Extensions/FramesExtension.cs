@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
 
 namespace MonkeFrames.Extensions;
@@ -77,6 +78,74 @@ public abstract class FramesExtension
     {
         uint flags = (uint)buttons | (uint)icon;
         return (MessageBoxResult)MessageBox(IntPtr.Zero, body, title, flags);
+    }
+
+    /// <summary>
+    /// Display an Open File dialog to the user and return the path selected, or null if cancelled.
+    /// </summary>
+    /// <param name="title">The title of the window.</param>
+    /// <param name="filter">The file filter to pass, formatted as \"Display Name|*.extension;Other Display Name|*.otherextension\"</param>
+    /// <param name="initialDirectory">The directory that shows by default when opening the dialog.</param>
+    /// <param name="flags">Flags to pass to the Windows shell.</param>
+    /// <returns>Path to the selected file, or null if cancelled.</returns>
+    public static string ShowOpenFileDialog(string title = "Select File", string filter = "All Files (*.*)|*.*", string initialDirectory = @"C:\", FileDialogFlags flags = FileDialogFlags.OFN_FILEMUSTEXIST)
+    {
+        var ofn = new OPENFILENAME();
+        ofn.lStructSize = Marshal.SizeOf(ofn);
+        
+        ofn.lpstrFilter = filter.Replace('|', '\0').Replace(';', '\0');
+        
+        ofn.lpstrFile = new string(new char[256]);
+        ofn.nMaxFile = ofn.lpstrFile.Length;
+
+        ofn.lpstrInitialDir = initialDirectory;
+        
+        ofn.lpstrFileTitle = new string(new char[256]);
+        ofn.nMaxFileTitle = ofn.lpstrFileTitle.Length;
+        
+        ofn.lpstrTitle = title;
+        
+        ofn.Flags = (int)flags; 
+
+        if (GetOpenFileName(ref ofn))
+            return ofn.lpstrFile;
+        
+        return null;
+    }
+
+    /// <summary>
+    /// Display a save file dialog to the user and return the path selected, or null if cancelled.
+    /// </summary>
+    /// <param name="title">The title of the window.</param>
+    /// <param name="filter">The file filter to pass, formatted as \"Display Name|*.extension;Other Display Name|*.otherextension\"</param>
+    /// <param name="initialDirectory">The directory that shows by default when opening the dialog.</param>
+    /// <param name="defaultExtension">The extension automatically appended to the file name if none is provided.</param>
+    /// <param name="flags">Flags to pass to the Windows shell.</param>
+    /// <returns>Path to the selected file, or null if cancelled.</returns>
+    public static string ShowSaveFileDialog(string title = "Select File", string filter = "All Files (*.*)|*.*", string initialDirectory = @"C:\", string defaultExtension = "txt", FileDialogFlags flags = FileDialogFlags.OFN_OVERWRITEPROMPT | FileDialogFlags.OFN_PATHMUSTEXIST)
+    {
+        var ofn = new OPENFILENAME();
+        ofn.lStructSize = Marshal.SizeOf(ofn);
+        
+        ofn.lpstrFilter = filter.Replace('|', '\0').Replace(';', '\0');
+        
+        ofn.lpstrFile = new string(new char[260]);
+        ofn.nMaxFile = ofn.lpstrFile.Length;
+
+        ofn.lpstrInitialDir = initialDirectory;
+        
+        ofn.lpstrFileTitle = new string(new char[260]);
+        ofn.nMaxFileTitle = ofn.lpstrFileTitle.Length;
+        
+        ofn.lpstrTitle = title;
+        ofn.lpstrDefExt = default;
+        
+        ofn.Flags = (int)flags; 
+
+        if (GetSaveFileName(ref ofn))
+            return ofn.lpstrFile;
+        
+        return null;
     }
 
     /// <summary>
@@ -177,6 +246,89 @@ public abstract class FramesExtension
         Continue = 11
     }
 
+    [Flags]
+    public enum FileDialogFlags : int
+    {
+        /// <summary>The user can type only names of existing directories.</summary>
+        OFN_READONLY = 0x00000001,
+        /// <summary>Causes the Save As dialog box to prompt the user for permission to overwrite an existing file.</summary>
+        OFN_OVERWRITEPROMPT = 0x00000002,
+        /// <summary>Hides the Read Only check box.</summary>
+        OFN_HIDEREADONLY = 0x00000004,
+        /// <summary>Causes the dialog box to restore the current directory to its original value if the user changed it.</summary>
+        OFN_NOCHANGEDIR = 0x00000008,
+        /// <summary>Causes the dialog box to use the default help procedure.</summary>
+        OFN_SHOWHELP = 0x00000010,
+        /// <summary>Enables hook procedures specified in the lpfnHook member.</summary>
+        OFN_ENABLEHOOK = 0x00000020,
+        /// <summary>Enables dialog box templates.</summary>
+        OFN_ENABLETEMPLATE = 0x00000040,
+        /// <summary>Enables dialog box templates by handle.</summary>
+        OFN_ENABLETEMPLATEHANDLE = 0x00000080,
+        /// <summary>The lpstrFilter buffer contains no invalid characters.</summary>
+        OFN_NOVALIDATE = 0x00000100,
+        /// <summary>Allows the user to select more than one file.</summary>
+        OFN_ALLOWMULTISELECT = 0x00000200,
+        /// <summary>Specifies that the extension of the returned filename is different from the extension specified by lpstrDefExt.</summary>
+        OFN_EXTENSIONDIFFERENT = 0x00000400,
+        /// <summary>The user can type only valid paths.</summary>
+        OFN_PATHMUSTEXIST = 0x00000800,
+        /// <summary>The user can type only names of existing files.</summary>
+        OFN_FILEMUSTEXIST = 0x00001000,
+        /// <summary>The dialog box prompts the user for permission to create a file that does not currently exist.</summary>
+        OFN_CREATEPROMPT = 0x00002000,
+        /// <summary>Causes the dialog box to share violations or network errors.</summary>
+        OFN_SHAREAWARE = 0x00004000,
+        /// <summary>Specifies that the returned file does not have the Read Only attribute and is not in a write-protected directory.</summary>
+        OFN_NOREADONLYRETURN = 0x00008000,
+        /// <summary>Specifies that the file is not to be added to the recent documents list.</summary>
+        OFN_NOTESTFILECREATE = 0x00010000,
+        /// <summary>Forces the hiding of the Read Only check box.</summary>
+        OFN_NONETWORKBUTTON = 0x00020000,
+        /// <summary>Directs the dialog box to return the path and file name of the selected shortcut (.lnk) file.</summary>
+        OFN_NODEREFERENCELINKS = 0x00100000,
+        /// <summary>Causes the dialog box to use the Explorer-style user interface.</summary>
+        OFN_EXPLORER = 0x00080000,
+        /// <summary>Prevents the system from adding a link to the selected file in the recent documents list.</summary>
+        OFN_DONTADDTORECENT = 0x02000000,
+        /// <summary>Forces the dialog box to show hidden and system files.</summary>
+        OFN_FORCESHOWHIDDEN = 0x10000000
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct OPENFILENAME
+    {
+        public int lStructSize;
+        public IntPtr hwndOwner;
+        public IntPtr hInstance;
+        public string lpstrFilter;
+        public string lpstrCustomFilter;
+        public int nMaxCustFilter;
+        public int nFilterIndex;
+        public string lpstrFile;
+        public int nMaxFile;
+        public string lpstrFileTitle;
+        public int nMaxFileTitle;
+        public string lpstrInitialDir;
+        public string lpstrTitle;
+        public int Flags;
+        public short nFileOffset;
+        public short nFileExtension;
+        public string lpstrDefExt;
+        public IntPtr lCustData;
+        public IntPtr lpfnHook;
+        public string lpTemplateName;
+        public IntPtr pvReserved;
+        public int dwReserved;
+        public int FlagsEx;
+    }
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
+
+    [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern bool GetOpenFileName(ref OPENFILENAME ofn);
+
+    [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern bool GetSaveFileName(ref OPENFILENAME ofn);
 }
