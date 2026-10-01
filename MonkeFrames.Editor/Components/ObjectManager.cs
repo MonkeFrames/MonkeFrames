@@ -2,11 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Classes;
-using MonkeFrames.Editor.UI;
-using MonkeFrames.Editor.Utilities;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -135,7 +132,7 @@ public class ObjectManager : MonoBehaviour
         }
     }
 
-    private Texture2D TryLoadObjectTexture(string objFileName)
+    public (bool, Texture2D) TryLoadObjectTexture(string objFileName)
     {
         string baseName = Path.GetFileNameWithoutExtension(objFileName);
         string folder = ObjectsFolder;
@@ -158,7 +155,7 @@ public class ObjectManager : MonoBehaviour
                         if (mtlTex != null)
                         {
                             Console.WriteLine($"[MonkeFrames::ObjectManager] Successfully loaded MTL texture.");
-                            return mtlTex;
+                            return (true, mtlTex);
                         }
                     }
                 }
@@ -166,6 +163,7 @@ public class ObjectManager : MonoBehaviour
             catch (Exception ex)
             {
                 Console.WriteLine($"[MonkeFrames::ObjectManager] Error reading .mtl file '{mtlPath}': {ex.Message}");
+                return (false, null);
             }
         }
 
@@ -179,11 +177,11 @@ public class ObjectManager : MonoBehaviour
             if (imgTex != null)
             {
                 Console.WriteLine($"[MonkeFrames::ObjectManager] Successfully loaded fallback texture.");
-                return imgTex;
+                return (true, imgTex);
             }
         }
 
-        return null;
+        return (false, null);
     }
 
     private static Texture2D LoadTextureFromFile(string filePath)
@@ -238,9 +236,11 @@ public class ObjectManager : MonoBehaviour
         if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
 
         // Try to load texture via .mtl file or matching image file (.png/.jpg)
-        Texture2D tex = TryLoadObjectTexture(objFileName);
-        if (tex != null)
+        var textureLoadResult = TryLoadObjectTexture(objFileName);
+        if (textureLoadResult.Item1)
         {
+            var tex = textureLoadResult.Item2;
+
             mat.mainTexture = tex;
             if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", tex);
             if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);

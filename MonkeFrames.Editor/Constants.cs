@@ -13,8 +13,8 @@ public static class Constants
 {
     public const string Name = "MonkeFrames";
     public const string Guid = "dev.sirkingbinx.monkeframes";
-    public const string Version = "2.0";
-    public static readonly string VersionID = $"{Version}";
+    public const string Version = "2.1";
+    public static readonly string VersionID = $"{Version} Beta 1";
 
     private static string _buildDate;
     public static string BuildDate
@@ -37,7 +37,7 @@ public static class Constants
     {
         DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
 
-        string[] folders = ["projects", "exports", "replays", "objects"];
+        string[] folders = ["projects", "exports", "replays", "objects", "extensions"];
         foreach (string folder in folders)
             Directory.CreateDirectory(SystemUtilities.Combine(DataFolder, folder));
 

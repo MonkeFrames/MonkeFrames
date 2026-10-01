@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>netstandard2.1</TargetFramework>
+	      <PlatformTarget>x64</PlatformTarget>
+        <LangVersion>latest</LangVersion>
+
+        <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+        
+        <DebugType Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">embedded</DebugType>
+
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    </PropertyGroup>
+</Project>

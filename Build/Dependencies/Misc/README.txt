@@ -10,6 +10,7 @@ Contents in this folder are requirements for MonkeFrames to operate as intended,
 
 | Binary                       | Name                          | Description                                                  |
 ===============================================================================================================================
-| MonkeFrames.Compiler.dll     | MonkeFrames Compiler (2.0)    | Keyframe and project management system for MonkeFrames       |
-| MonkeFrames.Editor.dll       | MonkeFrames Editor (2.0)      | Visual editor (UI) for MonkeFrames                           |
+| MonkeFrames.Compiler.dll     | MonkeFrames Compiler (2.1)    | Keyframe and project management system for MonkeFrames       |
+| MonkeFrames.Extensions.dll   | MonkeFrames Extensions (2.1)  | Shared extension framework for MonkeFrames                   |
+| MonkeFrames.Editor.dll       | MonkeFrames Editor (2.1)      | Visual editor (UI) for MonkeFrames                           |
 | ffmpeg.exe                   | FFmpeg (9.0.1)                | Libre video/audio encoding/decoding - https://ffmpeg.org/    |

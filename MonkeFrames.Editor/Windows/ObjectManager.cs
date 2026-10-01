@@ -1,9 +1,10 @@
-using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.UI;
+using MonkeFrames.Editor.Utilities;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using UnityEngine;
 
 namespace MonkeFrames.Editor.Windows;
@@ -39,13 +40,35 @@ public class ObjectManagerWindow : IEditorWindow
             UIManager.Instance.Status = "Refreshed Objects folder.";
         }
 
-        if (GUI.Button(new Rect(w - 214, y - 2, 94, 26), "Open Folder", Theme.AccentButton))
+        if (GUI.Button(new Rect(w - 214, y - 2, 94, 26), "+ Add", Theme.AccentButton))
         {
-            Process.Start(new ProcessStartInfo
+            string file = Win32Utilities.OpenFile("Select obj file", "Object files\0*.obj", SystemUtilities.GetFolder(System.Environment.SpecialFolder.MyDocuments));
+
+            if (string.IsNullOrEmpty(file))
+                return;
+
+            om.EnsureDirectoryExists();
+
+            var objectPath = Path.Combine(ObjectManager.ObjectsFolder, Path.GetFileName(file));
+            File.Copy(file, objectPath);
+
+            var texResult = ObjectManager.Instance.TryLoadObjectTexture(objectPath);
+            bool didGetTexture = texResult.Item1;
+            if (!didGetTexture)
             {
-                FileName = ObjectManager.ObjectsFolder,
-                UseShellExecute = true
-            });
+                string texFile = Win32Utilities.OpenFile("Select object texture file", "Unity texture file\0*png;*.jpg;*.jpeg\0All files\0*.*");
+                didGetTexture = !string.IsNullOrEmpty(file);
+
+                if (didGetTexture)
+                    File.Copy(texFile, Path.Combine(ObjectManager.ObjectsFolder, Path.GetFileNameWithoutExtension(file) + Path.GetExtension(texFile)));
+            }
+
+            om.SyncWithProject();
+
+            if (didGetTexture)
+                UIManager.Instance.Status = $"Added {Path.GetFileName(file)} to objects";
+            else
+                UIManager.Instance.Status = $"Added {Path.GetFileName(file)} to objects (no texture found)";
         }
         y += 28f;
 
