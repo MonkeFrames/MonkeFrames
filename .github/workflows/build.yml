@@ -23,7 +23,7 @@ jobs:
         uses: sirkingbinx/setup-gorilla-tag@1.0.0
 
       - name: Build Solution
-        run: dotnet build -c Debug -o ./build
+        run: dotnet build -c Debug -o ./build -p:CI=TRUE
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4

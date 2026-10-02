@@ -39,6 +39,9 @@ public class Settings
     /// <summary>How much mouse look is smoothed, 0 (light) to 1 (heavy, very floaty).</summary>
     public float MouseSmoothing = 0.5f;
 
+    /// <summary>Saved options shown in the Sources window.</summary>
+    public SourcesSettings Sources = new();
+
     /// <summary>Free cam tilt: sticks at level, and glides to level when you let go close to it.</summary>
     public bool AutoLevel = true;
     public float LevelSnapAngle = 3f;    // detent around 0° while tilting
@@ -185,10 +188,15 @@ public class Settings
 
         string prefs = File.ReadAllText(SystemUtilities.Combine(Constants.DataFolder, "config.json"));
         current = JsonConvert.DeserializeObject<Settings>(prefs, settings) ?? new Settings();
+        current.Sources ??= new SourcesSettings();
     }
 
     public static void Save()
     {
+        current ??= new Settings();
+        current.Sources ??= new SourcesSettings();
+        CameraModes.Instance?.SaveSettings(current.Sources);
+
         var settings = new JsonSerializerSettings
         {
             Converters = { new ColorConverter() },
@@ -202,4 +210,52 @@ public class Settings
 
         KeyframeManager.Instance.RefreshOrbs();
     }
+}
+
+/// <summary>Persistent camera mode and tuning values used by the Sources window.</summary>
+public class SourcesSettings
+{
+    public int Mode;
+
+    public float FieldOfView = 75f;
+    public float Smoothing = 0.35f;
+    public float PositionLag;
+    public float LookHeight;
+    public float Dutch;
+    public float Shake;
+    public bool MotionBlur;
+    public float MotionBlurStrength = 0.5f;
+
+    public bool OrbitAutoSpin = true;
+    public float OrbitSpeed = 20f;
+    public float OrbitDistance = 3f;
+    public float OrbitHeight = 0.4f;
+    public float OrbitAngle = 12f;
+    public bool OrbitRelative;
+
+    public bool LevelHorizon = true;
+    public float ForwardOffset = 0.12f;
+
+    public float FollowDistance = 2.5f;
+    public float FollowHeight = 0.8f;
+    public float FollowSide;
+    public float FollowTurnLag = 0.5f;
+
+    public float ShoulderSide = 0.45f;
+    public float ShoulderBack = 1.1f;
+    public float ShoulderHeight = 0.22f;
+
+    public bool TrackingAutoZoom;
+    public float TrackingFrame = 1.2f;
+    public float FrontDistance = 1.6f;
+    public float FrontHeight = 0.1f;
+    public float TopHeight = 6f;
+    public bool TopRotate = true;
+    public float SideAngle = 90f;
+    public float SideDistance = 4f;
+    public float SideHeight = 0.3f;
+    public bool HandRight = true;
+    public bool HandLookAtFace = true;
+    public float DirectorInterval = 6f;
+    public bool DirectorBlend = true;
 }

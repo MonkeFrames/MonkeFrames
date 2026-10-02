@@ -69,6 +69,7 @@ public class Plugin : BaseUnityPlugin
         }
 
         CameraManager.Instance.SetModEnabled(true);
+        CameraModes.Instance?.LoadSettings(Settings.current.Sources);
     };
 
     public static Action OnMonkeFramesUnloaded = () =>
