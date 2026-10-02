@@ -10,4 +10,8 @@
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\MonkeFrames.Compiler\MonkeFrames.Compiler.csproj"/>
+	</ItemGroup>
 </Project>

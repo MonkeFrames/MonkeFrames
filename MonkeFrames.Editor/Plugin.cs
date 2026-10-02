@@ -3,6 +3,8 @@ using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
 using System;
 using UnityEngine;
+using MonkeFrames.Extensions;
+
 
 #if DEBUG
 using System.Runtime.InteropServices;
@@ -75,6 +77,7 @@ public class Plugin : BaseUnityPlugin
     public static Action OnMonkeFramesUnloaded = () =>
     {
         Settings.Save();
+        ExtensionManager.CallMethod("OnUnload");
     };
 
 #if DEBUG

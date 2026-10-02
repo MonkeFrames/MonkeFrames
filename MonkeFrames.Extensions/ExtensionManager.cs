@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Linq;
+using System.Runtime.CompilerServices;
 
 namespace MonkeFrames.Extensions;
 
@@ -42,8 +43,6 @@ public static class ExtensionManager
 
         try
         {
-            // Load a private copy so Windows does not lock the installed extension file.
-            // A unique location also ensures the runtime doesn't return an already-loaded assembly.
             string shadowDirectory = Path.Combine(Path.GetTempPath(), "MonkeFrames", "extensions", (++_loadGeneration).ToString());
             Directory.CreateDirectory(shadowDirectory);
             string shadowPath = Path.Combine(shadowDirectory, Path.GetFileName(filePath));
@@ -86,7 +85,49 @@ public static class ExtensionManager
             Load(pluginAssembly);
     }
 
-    /// <summary>Unload the current extension instances and load every installed extension again.</summary>
+    public static T CallMethod<T>(string methodName, T returnIfNone = default, params object[] args)
+    {
+        if (Plugins.Count == 0)
+            return returnIfNone;
+
+        foreach (FramesExtension extension in Plugins.Values)
+        {
+            MethodInfo method = extension.GetType().GetMethod(methodName);
+            if (method == null)
+                continue;
+
+            object result = null;
+
+            try
+            {
+                result = method.Invoke(extension, [.. args]);
+            } catch { } // i don't care buddy
+
+            if (result is T expected)
+                return expected;
+        }
+
+        return returnIfNone;
+    }
+
+    public static void CallMethod(string methodName, params object[] args)
+    {
+        if (Plugins.Count == 0)
+            return;
+
+        foreach (FramesExtension extension in Plugins.Values)
+        {
+            MethodInfo method = extension.GetType().GetMethod(methodName);
+            if (method == null)
+                continue;
+
+            try
+            {
+                method.Invoke(extension, [.. args]);
+            } catch { } // i don't care buddy
+        }
+    }
+
     public static void Reload()
     {
         foreach (var plugin in Plugins.Values.ToArray())

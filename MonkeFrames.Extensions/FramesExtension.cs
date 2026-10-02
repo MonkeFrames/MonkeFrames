@@ -1,3 +1,4 @@
+using MonkeFrames.Compiler.Models;
 using System;
 using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
@@ -163,14 +164,29 @@ public abstract class FramesExtension
     public virtual void OnUnload() { }
 
     /// <summary>
-    /// Called when MonkeFrames enables your plugin, or when the user manually enables it via GUI.
+    /// Called before MonkeFrames compiles a project.
     /// </summary>
-    public virtual void OnEnable() { }
+    public virtual void OnCompilationStart(Project project) { }
 
     /// <summary>
-    /// Called when MonkeFrames disables your plugin, or when the user manually disables it via GUI.
+    /// Called after MonkeFrames finishes compiling a project.
     /// </summary>
-    public virtual void OnDisable() { }
+    public virtual void OnCompilationEnd(Project project) { }
+
+    /// <summary>
+    /// Called before MonkeFrames moves to a keyframe's position and rotation.
+    /// The keyframe in the project will not change, this only affects the
+    /// camera.
+    /// 
+    /// This is called during playback (Project > Play) and exporting (Project > Export to MP4),
+    /// but not from the Keyframe Player (Window > Keyframe Player).
+    /// 
+    /// If multiple extensions return a keyframe, the first one that returned a value will have priority.
+    /// </summary>
+    /// <param name="keyframe">The keyframe the camera was going to move to. This is a copy.</param>
+    /// <returns>Either a modified keyframe or null. If a keyframe is returned, it will move to that
+    /// keyframe instead of the one provided in the method.</returns>
+    public virtual Keyframe? OnKeyframeStep(Keyframe keyframe) { return null; }
 
     public enum MessageBoxButtons : uint
     {
