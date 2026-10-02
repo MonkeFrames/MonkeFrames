@@ -92,10 +92,21 @@ public class UIManager : MonoBehaviour
 
         Console.WriteLine("[MonkeFrames::UIManager] Initializing managers...");
 
-        List<Type> windowTypes = Assembly.GetExecutingAssembly().GetLoadableTypes()
-            .Where(t => typeof(IEditorWindow).IsAssignableFrom(t) && t.IsClass).ToList();
-        List<Type> menuTypes = Assembly.GetExecutingAssembly().GetLoadableTypes()
-            .Where(t => typeof(IEditorMenu).IsAssignableFrom(t) && t.IsClass).ToList();
+        // GetTypes() walks the whole editor assembly and is relatively expensive. Do it
+        // once, then classify the results for both registries.
+        Type[] editorTypes = Assembly.GetExecutingAssembly().GetLoadableTypes().ToArray();
+        List<Type> windowTypes = new();
+        List<Type> menuTypes = new();
+        foreach (Type type in editorTypes)
+        {
+            if (!type.IsClass || type.IsAbstract)
+                continue;
+
+            if (typeof(IEditorWindow).IsAssignableFrom(type))
+                windowTypes.Add(type);
+            if (typeof(IEditorMenu).IsAssignableFrom(type))
+                menuTypes.Add(type);
+        }
 
         foreach (Type windowType in windowTypes)
         {

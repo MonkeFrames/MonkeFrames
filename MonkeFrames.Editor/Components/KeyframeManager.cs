@@ -134,12 +134,12 @@ public class KeyframeManager : MonoBehaviour
     public void StartBuild()
     {
         Task.Run(async () => {
-            ExtensionManager.CallMethod("OnCompilationStart");
+            ExtensionManager.CallMethod("OnCompilationStart", Project);
             IsCompiling = true;
             await Task.Delay(100); // give frame time to process
             await Project.Build();
             IsCompiling = false;
-            ExtensionManager.CallMethod("OnCompilationEnd");
+            ExtensionManager.CallMethod("OnCompilationEnd", Project);
         }); 
     }
 
