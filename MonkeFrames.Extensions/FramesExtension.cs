@@ -45,10 +45,12 @@ public abstract class FramesExtension
         if (menuPaths.Length != 2)
             throw new ArgumentException("Menu path must be formatted as \"Menu Name/Button Text\"", nameof(menuPath));
     
-        if (!ExtensionManager.Menus.ContainsKey(menuPaths[0].Trim()))
-            ExtensionManager.Menus.Add(menuPaths[0].Trim(), new());
+        string menuName = menuPaths[0].Trim();
+        string itemName = menuPaths[1].Trim();
+        if (!ExtensionManager.Menus.ContainsKey(menuName))
+            ExtensionManager.Menus.Add(menuName, new());
         
-        ExtensionManager.Menus[menuPaths[0]].Add(menuPaths[1].Trim(), action);
+        ExtensionManager.Menus[menuName][itemName] = action;
     }
 
     /// <summary>

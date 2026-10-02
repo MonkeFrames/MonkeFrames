@@ -3,8 +3,6 @@ using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
 using System;
 using UnityEngine;
-using MonkeFrames.Extensions;
-using MonkeFrames.Editor.Utilities;
 
 #if DEBUG
 using System.Runtime.InteropServices;
@@ -47,15 +45,6 @@ public class Plugin : BaseUnityPlugin
 
     public static Action OnMonkeFramesLoaded = () =>
     {
-        Console.WriteLine("[MonkeFrames::Extensions] Initializing extensions...");
-        
-        ExtensionManager.Init(); // halts thread, don't need an await here
-
-        ExtensionUtilities.CreateMenus();
-        ExtensionUtilities.CreateWindows();
-
-        Console.WriteLine($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
-
         Console.WriteLine($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
 
         Settings.Load();

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading.Tasks;
+using System.Linq;
 
 namespace MonkeFrames.Extensions;
 
@@ -31,6 +31,7 @@ public static class ExtensionManager
     }
 
     public static List<Assembly> Assemblies = new();
+    private static int _loadGeneration;
 
     public static void Load(string filePath)
     {
@@ -39,7 +40,17 @@ public static class ExtensionManager
 
         Assembly assembly;
 
-        try { assembly = Assembly.LoadFile(filePath); }
+        try
+        {
+            // Load a private copy so Windows does not lock the installed extension file.
+            // A unique location also ensures the runtime doesn't return an already-loaded assembly.
+            string shadowDirectory = Path.Combine(Path.GetTempPath(), "MonkeFrames", "extensions", (++_loadGeneration).ToString());
+            Directory.CreateDirectory(shadowDirectory);
+            string shadowPath = Path.Combine(shadowDirectory, Path.GetFileName(filePath));
+            File.Copy(filePath, shadowPath, true);
+            assembly = Assembly.LoadFile(shadowPath);
+            Assemblies.Add(assembly);
+        }
         catch (Exception ex)
         {
             Console.WriteLine(ex);
@@ -49,21 +60,18 @@ public static class ExtensionManager
         List<(FramesExtension.Info, FramesExtension)> plugins =
             FramesReflection.GetInstancesOfTypeWithAttribute<FramesExtension.Info, FramesExtension>(assembly);
 
-        List<Task> loadingTasks = new();
-
         foreach ((FramesExtension.Info, FramesExtension) pluginData in plugins)
         {
             FramesExtension.Info metadata = pluginData.Item1;
             FramesExtension plugin = pluginData.Item2;
 
-            Plugins.Add(metadata, plugin);
+            Plugins[metadata] = plugin;
 
             Console.WriteLine($"Loaded plugin [{metadata.Name} {metadata.Version}] ({metadata.GUID})");
 
-            loadingTasks.Add(Task.Run(plugin.OnLoad));
+            try { plugin.OnLoad(); }
+            catch (Exception ex) { Console.WriteLine($"Extension [{metadata.Name}] failed during OnLoad: {ex}"); }
         }
-
-        Task.WaitAll([.. loadingTasks]);
     }
 
     public static void Init()
@@ -71,11 +79,26 @@ public static class ExtensionManager
         string pluginsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "MonkeFrames", "extensions");
 
-        List<Task> loadingTasks = new();
+        if (!Directory.Exists(pluginsFolder))
+            Directory.CreateDirectory(pluginsFolder);
 
-        foreach (string pluginAssembly in Directory.EnumerateFiles(pluginsFolder, "*.*"))
+        foreach (string pluginAssembly in Directory.EnumerateFiles(pluginsFolder, "*.mfextension"))
             Load(pluginAssembly);
+    }
 
-        Task.WaitAll([.. loadingTasks]);
+    /// <summary>Unload the current extension instances and load every installed extension again.</summary>
+    public static void Reload()
+    {
+        foreach (var plugin in Plugins.Values.ToArray())
+        {
+            try { plugin.OnUnload(); }
+            catch (Exception ex) { Console.WriteLine($"Extension failed during OnUnload: {ex}"); }
+        }
+
+        Plugins.Clear();
+        Menus.Clear();
+        Windows.Clear();
+        Assemblies.Clear();
+        Init();
     }
 }
