@@ -14,4 +14,10 @@
 	<ItemGroup>
 		<ProjectReference Include="..\MonkeFrames.Compiler\MonkeFrames.Compiler.csproj"/>
 	</ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="0Harmony">
+            <HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
+        </Reference>
+    </ItemGroup>
 </Project>

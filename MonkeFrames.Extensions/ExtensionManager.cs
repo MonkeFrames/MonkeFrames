@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Linq;
-using System.Runtime.CompilerServices;
+using HarmonyLib;
+using System.Text.RegularExpressions;
 
 namespace MonkeFrames.Extensions;
 
@@ -13,6 +14,8 @@ public static class ExtensionManager
 
     public static Dictionary<string, Dictionary<string, Action>> Menus = new();
     public static List<FramesWindow> Windows = new();
+
+    public static Dictionary<string, Harmony> HarmonyInstances = new();
 
     private static bool IsAssembly(string assemblyPath)
     {
@@ -141,5 +144,37 @@ public static class ExtensionManager
         Windows.Clear();
         Assemblies.Clear();
         Init();
+    }
+
+    private static readonly Regex HarmonyMethodFormat = new Regex(
+        @"^([a-zA-Z_][a-zA-Z0-9_\.]*):([a-zA-Z_][a-zA-Z0-9_]*)$", 
+        RegexOptions.Compiled
+    );
+
+    public static bool IsValidFormat(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return false;
+        return HarmonyMethodFormat.IsMatch(input);
+    }
+
+    internal static void ManagerApplyPatch(Type callingType, string fqdn, Delegate patchMethod, FramesExtension.PatchType patchType)
+    {
+        if (!IsValidFormat(fqdn))
+            throw new ArgumentException("Method name has bad format.", nameof(fqdn));
+
+        if (callingType.GetCustomAttribute<FramesExtension.Info>() is not FramesExtension.Info info)
+            throw new ArgumentException("Missing FramesExtension.Info");
+
+        if (!HarmonyInstances.ContainsKey(info.GUID))
+            HarmonyInstances.Add(info.GUID, new Harmony(info.GUID));
+        
+        Harmony harmony = HarmonyInstances[info.GUID];
+        MethodInfo method = AccessTools.Method(fqdn);
+        HarmonyMethod patch = new(patchMethod.GetMethodInfo());
+        
+        if (patchType == FramesExtension.PatchType.Prefix)
+            harmony.Patch(method, prefix: patch);
+        if (patchType == FramesExtension.PatchType.Postfix)
+            harmony.Patch(method, postfix: patch);
     }
 }

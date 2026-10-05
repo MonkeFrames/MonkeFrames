@@ -1,6 +1,5 @@
 using MonkeFrames.Compiler.Models;
 using System;
-using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
 
 namespace MonkeFrames.Extensions;
@@ -183,11 +182,32 @@ public abstract class FramesExtension
     /// 
     /// If multiple extensions return a keyframe, the first one that returned a value will have priority.
     /// </summary>
-    /// <param name="keyframe">The keyframe the camera was going to move to. This is a copy.</param>
-    /// <returns>Either a modified keyframe or null. If a keyframe is returned, it will move to that
+    /// <param name="keyframe">The keyframe the camera was going to move to.</param>
     /// keyframe instead of the one provided in the method.</returns>
-    public virtual Keyframe? OnKeyframeStep(Keyframe keyframe) { return null; }
+    public virtual void OnKeyframeStep(ref Keyframe keyframe) { }
 
+    /// <summary>
+    /// Patch a method with a prefix or postfix delegate. Do not use this if you don't know what you
+    /// are doing, bad calls to this method may crash MonkeFrames.
+    /// </summary>
+    /// <param name="methodName">The fully qualified name of the method, eg. MonkeFrames.Editor.Plugin:OnPlayerSpawned</param>
+    /// <param name="patchMethod">The method to call as the patch.</param>
+    /// <param name="patchType">The type of patch to apply.</param> 
+    /// <see href="https://harmony.pardeike.net/v2/articles/patching-prefix.html">Harmony Prefix Docs</see>
+    /// <see href="https://harmony.pardeike.net/v2/articles/patching-postfix.html">Harmony Postfix Docs</see>
+    /// <exception cref="ArgumentException">Parameter has bad format or you are missing an Info attribute.</exception>
+    /// <exception cref="Exception">Most likely an exception when patching with harmony.</exception>
+    public void ApplyPatch(string methodName, Delegate patchMethod, PatchType patchType = PatchType.Prefix) {
+        ExtensionManager.ManagerApplyPatch(GetType(), methodName, patchMethod, patchType);
+    }
+
+    public enum PatchType
+    {
+        Prefix,
+        Postfix
+    }
+
+    #region MessageBox enums
     public enum MessageBoxButtons : uint
     {
         /// <summary>The message box contains one push button: OK. This is the default.</summary>
@@ -263,7 +283,9 @@ public abstract class FramesExtension
         /// <summary>The Continue button was selected.</summary>
         Continue = 11
     }
+    #endregion
 
+    #region File Dialog
     [Flags]
     public enum FileDialogFlags : int
     {
@@ -340,7 +362,9 @@ public abstract class FramesExtension
         public int dwReserved;
         public int FlagsEx;
     }
+    #endregion
 
+    #region Win32
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
 
@@ -349,4 +373,5 @@ public abstract class FramesExtension
 
     [DllImport("comdlg32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     private static extern bool GetSaveFileName(ref OPENFILENAME ofn);
+    #endregion
 }
