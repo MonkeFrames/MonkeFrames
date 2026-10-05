@@ -394,9 +394,10 @@ public class CameraManager : MonoBehaviour
                 yield break;
             }
 
-            Keyframe currentFrameStep = kCache[playbackPosition];
-            Keyframe currentFrame = 
-                ExtensionManager.CallMethod<Keyframe?>("OnKeyframeStep", currentFrameStep) ?? currentFrameStep;
+            Keyframe currentFrame = kCache[playbackPosition];
+
+            foreach (FramesExtension extension in ExtensionManager.Plugins.Values)
+                extension.OnKeyframeStep(ref currentFrame);
 
             Blur.Set(currentFrame.MotionBlur, currentFrame.MotionBlurStrength);
 

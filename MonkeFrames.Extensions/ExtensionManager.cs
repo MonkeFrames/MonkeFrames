@@ -133,16 +133,23 @@ public static class ExtensionManager
 
     public static void Reload()
     {
-        foreach (var plugin in Plugins.Values.ToArray())
+        foreach (var pluginPair in Plugins.ToArray())
         {
-            try { plugin.OnUnload(); }
+            try {
+                pluginPair.Value.OnUnload();
+
+                if (HarmonyInstances[pluginPair.Key.GUID] is Harmony harmony)
+                    harmony.UnpatchSelf();
+            }
             catch (Exception ex) { Console.WriteLine($"Extension failed during OnUnload: {ex}"); }
         }
 
+        HarmonyInstances.Clear();
         Plugins.Clear();
         Menus.Clear();
         Windows.Clear();
         Assemblies.Clear();
+
         Init();
     }
 
@@ -165,12 +172,15 @@ public static class ExtensionManager
         if (callingType.GetCustomAttribute<FramesExtension.Info>() is not FramesExtension.Info info)
             throw new ArgumentException("Missing FramesExtension.Info");
 
+        if (!patchMethod.Method.IsStatic)
+            throw new ArgumentException("Patch method must be declared static");
+
         if (!HarmonyInstances.ContainsKey(info.GUID))
             HarmonyInstances.Add(info.GUID, new Harmony(info.GUID));
         
         Harmony harmony = HarmonyInstances[info.GUID];
         MethodInfo method = AccessTools.Method(fqdn);
-        HarmonyMethod patch = new(patchMethod.GetMethodInfo());
+        HarmonyMethod patch = new(patchMethod.Method);
         
         if (patchType == FramesExtension.PatchType.Prefix)
             harmony.Patch(method, prefix: patch);

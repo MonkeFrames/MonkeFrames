@@ -196,6 +196,7 @@ public class UIManager : MonoBehaviour
         ExtensionManager.Reload();
         ExtensionUtilities.CreateMenus();
         ExtensionUtilities.CreateWindows();
+        
         Menus = Menus.OrderBy(m => m.Index).ToList();
 
         Status = $"Reloaded {ExtensionManager.Plugins.Count} extension(s)";
