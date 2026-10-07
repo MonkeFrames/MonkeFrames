@@ -31,9 +31,9 @@ jobs:
           name: build-artifacts
           path: ./Build/latest
 
-      - name: Zip Folder
+      - name: Zip files using 7-Zip
         if: github.ref == 'refs/heads/dev'
-        run: zip -r MonkeFrames.zip ./Build/latest
+        run: 7z a -r MonkeFrames.zip ./Build/latest
 
       - name: Publish to MonkeForge dev channel
         if: github.ref == 'refs/heads/dev'
