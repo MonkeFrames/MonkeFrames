@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.AddressableAssets;
@@ -180,6 +181,10 @@ public static class PuppetBuilder
         HashSet<Renderer> worn = WornRenderers(rig);
         foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
         {
+            // The name is copied from VRRig.playerText1 below, rather than baking its
+            // current generated TMP mesh into the replay.
+            if (rig.playerText1 != null && r.gameObject == rig.playerText1.gameObject)
+                continue;
             if (!Include(r, worn))
                 continue;
 
@@ -246,7 +251,9 @@ public static class PuppetBuilder
         track.Paths = paths.ToArray();
         liveParts = live.ToArray();
 
-        return Finish(ctx, track);
+        ReplayPuppet puppet = Finish(ctx, track);
+        CreateNameTag(ctx, rig);
+        return puppet;
     }
 
     /// <summary>
@@ -351,9 +358,26 @@ public static class PuppetBuilder
     {
         if (track?.CosmeticIds == null || puppet == null || rig == null)
             yield break;
+
+        // Yall know you gotta load the cosmetics before using them right
+        // -skb
+        CosmeticsController controller = CosmeticsController.instance;
+        if (controller != null && !controller.v2_allCosmeticsInfoAssetRef_isLoaded)
+        {
+            IEnumerator loadCatalog = null;
+            try
+            {
+                loadCatalog = controller.V2_allCosmeticsInfoAssetRefSO_LoadCoroutine();
+            }
+            catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [1]: {ex.Message}"); }
+
+            if (loadCatalog != null)
+                yield return controller.StartCoroutine(loadCatalog);
+        }
+
         if (!GTHardCodedBones.TryGetBoneXforms(rig, out Transform[] sourceBones, out string error))
         {
-            if (!string.IsNullOrEmpty(error)) System.Console.WriteLine($"[MonkeFrames::Replay] Could not resolve cosmetic anchors: {error}");
+            if (!string.IsNullOrEmpty(error)) Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [2]: {error}");
             yield break;
         }
 
@@ -368,17 +392,25 @@ public static class PuppetBuilder
                 foreach (CosmeticAttachInfo attach in part.attachAnchors)
                 {
                     int boneIndex = GTHardCodedBones.GetBoneIndex(attach.parentBone);
-                    if (boneIndex < 0 || boneIndex >= sourceBones.Length || sourceBones[boneIndex] == null) continue;
+                    if (boneIndex < 0 || boneIndex >= sourceBones.Length || sourceBones[boneIndex] == null)
+                        continue;
 
                     string bonePath = PathOf(sourceBones[boneIndex], rig.transform);
-                    if (string.IsNullOrEmpty(bonePath)) continue;
+
+                    if (string.IsNullOrEmpty(bonePath))
+                        continue;
+
                     Transform parent = Node(puppet.BuildCtx, bonePath);
                     var operation = part.prefabAssetRef.InstantiateAsync(parent, true);
-                    while (!operation.IsDone) yield return null;
+
+                    while (!operation.IsDone)
+                        yield return null;
+
                     GameObject instance = operation.Result;
+
                     if (instance == null)
                     {
-                        System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic prefab failed to load: {info.displayName}");
+                        Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [3]: {info.displayName}");
                         continue;
                     }
 
@@ -389,20 +421,17 @@ public static class PuppetBuilder
                     puppet.AddressableCosmetics.Add(instance);
                     loadedAnyPart = true;
 
-                    // Disable physical collisions & interactions on cosmetic instances
                     foreach (Collider col in instance.GetComponentsInChildren<Collider>(true)) col.enabled = false;
                     foreach (Rigidbody rb in instance.GetComponentsInChildren<Rigidbody>(true)) rb.isKinematic = true;
 
-                    // Rebind any SkinnedMeshRenderers (clothing, shirts, badges) to puppet bones
                     RebindSkinnedMeshes(puppet.BuildCtx, instance);
                 }
             }
+
             if (loadedAnyPart && !string.IsNullOrEmpty(info.displayName))
                 loadedCosmeticIds.Add(info.displayName);
         }
 
-        // Fallback for non-Addressable cosmetics or cosmetics without asset refs:
-        // Copy their saved renderer paths from available rigs in the scene
         if (track.RendererPaths != null && track.RendererCosmeticIds != null && puppet.BuildCtx != null)
         {
             for (int i = 0; i < track.RendererPaths.Length; i++)
@@ -416,10 +445,17 @@ public static class PuppetBuilder
                 foreach (Transform source in puppet.BuildCtx.Sources)
                 {
                     Transform t = Find(source, path);
-                    if (t == null) continue;
+
+                    if (t == null)
+                        continue;
+
                     Renderer r = t.GetComponent<SkinnedMeshRenderer>() ?? (Renderer)t.GetComponent<MeshRenderer>();
-                    if (r == null || r.GetComponent<TMP_Text>() != null) continue;
-                    if (CopyRenderer(puppet.BuildCtx, r, path, source)) break;
+
+                    if (r == null || r.GetComponent<TMP_Text>() != null)
+                        continue;
+
+                    if (CopyRenderer(puppet.BuildCtx, r, path, source))
+                        break;
                 }
             }
         }
@@ -603,7 +639,40 @@ public static class PuppetBuilder
         foreach (string p in track.Paths)
             Node(ctx, p);
 
-        return Finish(ctx, track);
+        ReplayPuppet puppet = Finish(ctx, track);
+        CreateNameTag(ctx, model);
+        return puppet;
+    }
+
+    private static void CreateNameTag(Ctx ctx, VRRig sourceRig)
+    {
+        if (ctx?.Puppet == null || sourceRig == null || sourceRig.playerText1 == null)
+            return;
+
+        Transform sourceTag = sourceRig.playerText1.transform;
+        string parentPath = sourceTag.parent != null ? PathOf(sourceTag.parent, sourceRig.transform) : "";
+        if (parentPath == null)
+            return;
+
+        try
+        {
+            Transform targetParent = Node(ctx, parentPath);
+            GameObject nameTagObject = UnityEngine.Object.Instantiate(sourceTag.gameObject, targetParent, false);
+            nameTagObject.transform.localPosition = sourceTag.localPosition;
+            nameTagObject.transform.localRotation = sourceTag.localRotation;
+            nameTagObject.transform.localScale = sourceTag.localScale;
+            TextMeshPro nameTag = nameTagObject.GetComponent<TextMeshPro>();
+            if (nameTag == null)
+            {
+                UnityEngine.Object.Destroy(nameTagObject);
+                return;
+            }
+            nameTag.text = ctx.Puppet.Track?.Name ?? "Gorilla";
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"[MonkeFrames::Replay] Could not create replay name tag: {ex.Message}");
+        }
     }
 
     private static Ctx Begin(ReplayTrack track, Transform source)

@@ -4,11 +4,6 @@ using MonkeFrames.Editor.Components;
 using System;
 using UnityEngine;
 using MonkeFrames.Extensions;
-using MonkeFrames.Editor.Utilities;
-
-#if DEBUG
-using System.Runtime.InteropServices;
-#endif
 
 namespace MonkeFrames.Editor;
 
@@ -47,15 +42,6 @@ public class Plugin : BaseUnityPlugin
 
     public static Action OnMonkeFramesLoaded = () =>
     {
-        Console.WriteLine("[MonkeFrames::Extensions] Initializing extensions...");
-        
-        ExtensionManager.Init(); // halts thread, don't need an await here
-
-        ExtensionUtilities.CreateMenus();
-        ExtensionUtilities.CreateWindows();
-
-        Console.WriteLine($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
-
         Console.WriteLine($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
 
         Settings.Load();
@@ -80,47 +66,12 @@ public class Plugin : BaseUnityPlugin
         }
 
         CameraManager.Instance.SetModEnabled(true);
+        CameraModes.Instance?.LoadSettings(Settings.current.Sources);
     };
 
     public static Action OnMonkeFramesUnloaded = () =>
     {
         Settings.Save();
+        ExtensionManager.CallMethod("OnUnload");
     };
-
-#if DEBUG
-    Plugin()
-    {
-        AllocConsole();
-
-        Console.SetOut(new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
-        Console.SetError(new System.IO.StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
-
-        Console.Title = $"MonkeFrames {Constants.VersionID} (Build {Constants.BuildDate})";
-
-        Console.WriteLine($"MonkeFrames Debug Build {Constants.VersionID} (Build {Constants.BuildDate})");
-
-        Application.logMessageReceived += HandleLogMsg;
-
-        Application.quitting += () => {
-            Application.logMessageReceived -= HandleLogMsg;
-            FreeConsole();
-        };
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AllocConsole();
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool FreeConsole();
-
-    private static void HandleLogMsg(string logString, string stackTrace, LogType type)
-    {
-        if (type == LogType.Exception && stackTrace.Contains("MonkeFrames"))
-        {
-            Console.Error.WriteLine("An unhandled exception occured.");
-            Console.Error.WriteLine($"Message:     {logString}");
-            Console.Error.WriteLine($"Stack Trace: {stackTrace}");
-        }
-    }
-#endif
 }

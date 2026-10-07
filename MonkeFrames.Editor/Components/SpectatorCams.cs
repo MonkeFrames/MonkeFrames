@@ -474,13 +474,6 @@ public static class CamModel
         if (mr != null)
             mr.sharedMaterial = BodyMaterial(tint);
 
-        Material[] glow = GlowMaterials(tint);
-        if (body != null && glow != null)
-        {
-            Transform inner = body.Find("Glow Inner"), outer = body.Find("Glow Outer");
-            if (inner != null) inner.GetComponent<MeshRenderer>().sharedMaterial = glow[0];
-            if (outer != null) outer.GetComponent<MeshRenderer>().sharedMaterial = glow[1];
-        }
         Light l = body != null ? body.GetComponentInChildren<Light>() : null;
         if (l != null) l.color = tint;
     }
@@ -731,8 +724,6 @@ public static class CamModel
     }
 
     // ---------------- Glow ----------------
-
-    private static Texture2D _glowTight, _glowWide;
     private static Mesh _glowMeshInner, _glowMeshOuter;
     private static bool _glowBuilt;
     private static readonly Dictionary<Color32, Material[]> _glowMats = new();
@@ -894,22 +885,14 @@ public static class CamModel
                 _ = BodyMaterial(tint); // loads the textures
                 if (bodyMesh != null && HasUVs)
                 {
-                    _glowMeshInner = GlowShell(bodyMesh, _glowWide, 0.003f);
-                    _glowMeshOuter = GlowShell(bodyMesh, _glowWide, 0.014f);
+                    _glowMeshInner = GlowShell(bodyMesh, null, 0.003f);
+                    _glowMeshOuter = GlowShell(bodyMesh, null, 0.014f);
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[MonkeFrames::CamModel] Glow unavailable: {ex.Message}");
             }
-        }
-
-        Material[] mats = GlowMaterials(tint);
-        if (_glowMeshInner != null && mats != null)
-        {
-            Shell("Glow Inner", _glowMeshInner, mats[0]);
-            if (_glowMeshOuter != null)
-                Shell("Glow Outer", _glowMeshOuter, mats[1]);
         }
 
         GameObject lightGo = new GameObject("Glow Light") { layer = 0 };
@@ -920,29 +903,6 @@ public static class CamModel
         l.intensity = 0.9f;
         l.color = tint;
         l.shadows = LightShadows.None;
-
-        void Shell(string name, Mesh mesh, Material mat)
-        {
-            GameObject g = new GameObject(name) { layer = 0 };
-            g.transform.SetParent(body.transform, false);
-            g.AddComponent<MeshFilter>().sharedMesh = mesh;
-            MeshRenderer r = g.AddComponent<MeshRenderer>();
-            r.sharedMaterial = mat;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            r.receiveShadows = false;
-        }
-    }
-
-    private static Material[] GlowMaterials(Color tint)
-    {
-        if (_glowTight == null || _glowWide == null) return null;
-        tint.a = 1f;
-        Color32 key = tint;
-        if (_glowMats.TryGetValue(key, out Material[] m) && m[0] != null)
-            return m;
-        m = new[] { GlowMaterial(tint, _glowTight, 1.1f), GlowMaterial(tint, _glowWide, 0.55f) };
-        _glowMats[key] = m;
-        return m;
     }
 
     private static Material MakeMaterial(Color color, bool unlit)

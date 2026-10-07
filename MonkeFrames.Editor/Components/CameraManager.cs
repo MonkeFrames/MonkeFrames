@@ -94,7 +94,6 @@ public class CameraManager : MonoBehaviour
         if (Camera == null)
             Camera = gameObject.GetComponent<Camera>();
 
-
         // Update values
         if (!Manual)
         {
@@ -396,6 +395,10 @@ public class CameraManager : MonoBehaviour
             }
 
             Keyframe currentFrame = kCache[playbackPosition];
+
+            foreach (FramesExtension extension in ExtensionManager.Plugins.Values)
+                extension.OnKeyframeStep(ref currentFrame);
+
             Blur.Set(currentFrame.MotionBlur, currentFrame.MotionBlurStrength);
 
             Position = currentFrame.Position;

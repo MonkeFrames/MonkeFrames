@@ -8,10 +8,10 @@
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         
         <!-- add debug symbols for builds -->
-	    <DebugType Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">embedded</DebugType>
+	      <DebugType Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">embedded</DebugType>
 
         <!-- copy DLLs to output directory for copying -->
-	    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	      <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
 	
     <ItemGroup>

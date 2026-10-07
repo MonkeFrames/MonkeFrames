@@ -1,13 +1,14 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.Replays;
 using MonkeFrames.Editor.UI;
 using MonkeFrames.Editor.Utilities;
+using MonkeFrames.Extensions;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using UnityEngine;
 
 namespace MonkeFrames.Editor.Components;
@@ -91,10 +92,21 @@ public class UIManager : MonoBehaviour
 
         Console.WriteLine("[MonkeFrames::UIManager] Initializing managers...");
 
-        List<Type> windowTypes = Assembly.GetExecutingAssembly().GetLoadableTypes()
-            .Where(t => typeof(IEditorWindow).IsAssignableFrom(t) && t.IsClass).ToList();
-        List<Type> menuTypes = Assembly.GetExecutingAssembly().GetLoadableTypes()
-            .Where(t => typeof(IEditorMenu).IsAssignableFrom(t) && t.IsClass).ToList();
+        // GetTypes() walks the whole editor assembly and is relatively expensive. Do it
+        // once, then classify the results for both registries.
+        Type[] editorTypes = Assembly.GetExecutingAssembly().GetLoadableTypes().ToArray();
+        List<Type> windowTypes = new();
+        List<Type> menuTypes = new();
+        foreach (Type type in editorTypes)
+        {
+            if (!type.IsClass || type.IsAbstract)
+                continue;
+
+            if (typeof(IEditorWindow).IsAssignableFrom(type))
+                windowTypes.Add(type);
+            if (typeof(IEditorMenu).IsAssignableFrom(type))
+                menuTypes.Add(type);
+        }
 
         foreach (Type windowType in windowTypes)
         {
@@ -112,7 +124,17 @@ public class UIManager : MonoBehaviour
             Menus.Add(new IEditorMenuManager(menu));
         }
 
-        Menus = Menus.OrderBy(m => m.Menu.Index).ToList();
+        Console.WriteLine("[MonkeFrames::Extensions] Initializing extensions...");
+
+        ExtensionManager.Init();
+
+        Console.WriteLine($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
+        Console.WriteLine($"[MonkeFrames::Extensions] Creating extension menus and windows");
+
+        ExtensionUtilities.CreateMenus();
+        ExtensionUtilities.CreateWindows();
+
+        Menus = Menus.OrderBy(m => m.Index).ToList();
 
         Console.WriteLine("[MonkeFrames::UIManager] UI manager is running");
 
@@ -162,6 +184,23 @@ public class UIManager : MonoBehaviour
         if (w != null)
             w.Visible = !w.Visible;
         Console.WriteLine($"[MonkeFrames::UIManager] {menuName}.Visible = {w?.Visible ?? false};");
+    }
+
+    public void ReloadExtensions()
+    {
+        CurrentMenuIndex = -1;
+        _dropdownMenu = null;
+        _dropdownProgress = 0f;
+
+        ExtensionUtilities.ClearCreatedItems();
+        ExtensionManager.Reload();
+        ExtensionUtilities.CreateMenus();
+        ExtensionUtilities.CreateWindows();
+        
+        Menus = Menus.OrderBy(m => m.Index).ToList();
+
+        Status = $"Reloaded {ExtensionManager.Plugins.Count} extension(s)";
+        Console.WriteLine($"[MonkeFrames::Extensions] Reloaded {ExtensionManager.Plugins.Count} extensions");
     }
 
     public void Update()
@@ -266,7 +305,7 @@ public class UIManager : MonoBehaviour
         float x = 34;
         foreach (IEditorMenuManager menu in Menus)
         {
-            float w = Theme.Label.CalcSize(new GUIContent(menu.Menu.Name)).x + 22;
+            float w = Theme.Label.CalcSize(new GUIContent(menu.Name)).x + 22;
             Rect r = new Rect(x, 4, w, MenuBarHeight - 8);
             menu.BarRect = r;
 
@@ -279,7 +318,7 @@ public class UIManager : MonoBehaviour
                 open = true;
             }
 
-            if (Widgets.Ghost("bar." + menu.Menu.Name, r, menu.Menu.Name, Theme.LabelCenter, open))
+            if (Widgets.Ghost("bar." + menu.Name, r, menu.Name, Theme.LabelCenter, open))
             {
                 if (open)
                     CurrentMenuIndex = -1;
@@ -288,7 +327,7 @@ public class UIManager : MonoBehaviour
             }
 
             // Accent underline for the open menu
-            float u = Anim.To("bar.u." + menu.Menu.Name, open ? 1f : 0f, 18f);
+            float u = Anim.To("bar.u." + menu.Name, open ? 1f : 0f, 18f);
             if (u > 0.01f)
             {
                 float uw = (r.width - 16) * Anim.OutCubic(u);
@@ -364,7 +403,7 @@ public class UIManager : MonoBehaviour
 
     private void OpenMenu(IEditorMenuManager menu, bool fromSwitch)
     {
-        CurrentMenuIndex = menu.Menu.Index;
+        CurrentMenuIndex = menu.Index;
         _dropdownMenu = menu;
 
         // Replay a shortened entrance when sliding between menus.
