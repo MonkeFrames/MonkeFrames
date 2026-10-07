@@ -30,3 +30,18 @@ jobs:
         with:
           name: build-artifacts
           path: ./Build/latest
+
+      - name: Zip Folder
+        if: github.ref == 'refs/heads/dev'
+        run: zip -r MonkeFrames.zip ./Build/latest
+
+      - name: Publish to MonkeForge dev channel
+        if: github.ref == 'refs/heads/dev'
+        uses: sirkingbinx/monkeforge-ci@1.0.0
+        with:
+          api-key: ${{ secrets.MONKEFORGE_API_KEY }}
+          mod-id: com.monkeframes.monkeframes
+          version: 0.0.0-dev.${{ github.run_number }}
+          channel: dev
+          files: MonkeFrames.zip
+          notes: "Automated dev build from ${{ github.sha }}"
