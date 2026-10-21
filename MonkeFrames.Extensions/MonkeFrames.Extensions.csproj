@@ -23,8 +23,7 @@
     </ItemGroup>
     <ItemGroup>
         <Reference Include="Cardboard">
-            <HintPath>$(CardboardAssemblyPath)</HintPath>
-            <Private>true</Private>
+            <HintPath>$(DependenciesPath)\Cardboard\Cardboard.dll</HintPath>
         </Reference>
     </ItemGroup>
 </Project>
