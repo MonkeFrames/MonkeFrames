@@ -1,12 +1,13 @@
 using MonkeFrames.Editor.Components;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using System.IO;
 
 namespace MonkeFrames.Editor.Utilities;
 
 public static class SaveUtilities
 {
-    public static string ProjectDirectory => SystemUtilities.Combine(Constants.DataFolder, "projects");
+    public static string ProjectDirectory => Path.Combine(Constants.DataFolder, "projects");
 
     public static bool IsValidJson(string json) {
         try

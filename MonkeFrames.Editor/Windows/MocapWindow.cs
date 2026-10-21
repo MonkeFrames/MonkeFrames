@@ -187,7 +187,7 @@ public class MocapWindow : IEditorWindow
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MonkeFrames::Mocap] Could not open recordings folder: {ex.Message}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Could not open recordings folder: {ex.Message}");
             }
         }
         y += 26f;

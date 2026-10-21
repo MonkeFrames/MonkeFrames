@@ -1,20 +1,19 @@
-using GorillaNetworking;
 using MonkeFrames.Compiler.Models;
-using MonkeFrames.Editor.Utilities;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Cardboard;
 
 namespace MonkeFrames.Editor;
 
 public static class Constants
 {
     public const string Name = "MonkeFrames";
-    public const string Guid = "dev.sirkingbinx.monkeframes";
+    public const string Guid = "com.monkeframes.MonkeFrames";
     public const string Version = "2.1";
-    public static readonly string VersionID = $"{Version} Beta 1";
+    public static readonly string VersionID = $"{Version}";
 
     private static string _buildDate;
     public static string BuildDate
@@ -35,11 +34,11 @@ public static class Constants
 
     public static void Init()
     {
-        DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
+        DataFolder = Path.Combine(CardboardSystem.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
 
-        string[] folders = ["projects", "exports", "replays", "objects", "extensions"];
+        string[] folders = ["projects", "exports", "replays", "mocap", "objects", "extensions"];
         foreach (string folder in folders)
-            Directory.CreateDirectory(SystemUtilities.Combine(DataFolder, folder));
+            Directory.CreateDirectory(Path.Combine(DataFolder, folder));
 
             MonkeFramesAssemblyFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     }

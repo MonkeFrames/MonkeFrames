@@ -89,7 +89,7 @@ public class MotionBlurController : MonoBehaviour
         {
             // Some setups don't allow rendering from here; fall back to LateUpdate.
             _beforeRenderFailed = true;
-            System.Console.WriteLine($"[MonkeFrames::MotionBlur] Falling back to LateUpdate: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::MotionBlur] Falling back to LateUpdate: {ex.Message}");
         }
     }
 
@@ -155,7 +155,7 @@ public class MotionBlurController : MonoBehaviour
                 catch (System.Exception ex)
                 {
                     _failed = true;
-                    System.Console.WriteLine($"[MonkeFrames::MotionBlur] Disabled: {ex.Message}");
+                    MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::MotionBlur] Disabled: {ex.Message}");
                     UIManager.Instance.Status = "Motion blur couldn't start on this setup and was turned off.";
                 }
                 finally

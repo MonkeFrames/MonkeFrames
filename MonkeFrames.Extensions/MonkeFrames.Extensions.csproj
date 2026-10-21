@@ -10,4 +10,20 @@
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\MonkeFrames.Compiler\MonkeFrames.Compiler.csproj"/>
+	</ItemGroup>
+
+    <ItemGroup>
+        <Reference Include="BepInEx"><HintPath>$(BepInExAssemblyPath)/BepInEx.dll</HintPath></Reference>
+        <Reference Include="0Harmony">
+            <HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+    <ItemGroup>
+        <Reference Include="Cardboard">
+            <HintPath>$(DependenciesPath)\Cardboard\Cardboard.dll</HintPath>
+        </Reference>
+    </ItemGroup>
 </Project>

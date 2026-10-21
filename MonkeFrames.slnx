@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+  </Folder>
   <Project Path="MonkeFrames.Compiler/MonkeFrames.Compiler.csproj" />
   <Project Path="MonkeFrames.Editor/MonkeFrames.Editor.csproj" />
   <Project Path="MonkeFrames.Extensions/MonkeFrames.Extensions.csproj" />

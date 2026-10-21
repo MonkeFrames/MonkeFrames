@@ -1,16 +1,17 @@
 |                                                         MonkeFrames                                                         |
 ===============================================================================================================================
 
-These are the binaries for MonkeFrames 2.0, which has its source code freely available. You may find this exact build's source
+These are the binaries for MonkeFrames 2.1, which has its source code freely available. You may find this exact build's source
 code at <https://github.com/MonkeFrames/MonkeFrames>.
 
                                         DO NOT DELETE ANY SINGLE COMPONENT IN THIS FOLDER!
 
 Contents in this folder are requirements for MonkeFrames to operate as intended, reasoning for which is below.
 
-| Binary                       | Name                          | Description                                                  |
-===============================================================================================================================
-| MonkeFrames.Compiler.dll     | MonkeFrames Compiler (2.1)    | Keyframe and project management system for MonkeFrames       |
-| MonkeFrames.Extensions.dll   | MonkeFrames Extensions (2.1)  | Shared extension framework for MonkeFrames                   |
-| MonkeFrames.Editor.dll       | MonkeFrames Editor (2.1)      | Visual editor (UI) for MonkeFrames                           |
-| ffmpeg.exe                   | FFmpeg (9.0.1)                | Libre video/audio encoding/decoding - https://ffmpeg.org/    |
+| Binary                       | Name                          | Description                                                                        |
+=====================================================================================================================================================
+| MonkeFrames.Compiler.dll     | MonkeFrames Compiler (2.1)    | Keyframe and project management system for MonkeFrames                             |
+| MonkeFrames.Extensions.dll   | MonkeFrames Extensions (2.1)  | Shared extension framework for MonkeFrames                                         |
+| MonkeFrames.Editor.dll       | MonkeFrames Editor (2.1)      | Visual editor (UI) for MonkeFrames                                                 |
+| ffmpeg.exe                   | FFmpeg (9.0.1)                | Libre video/audio encoding/decoding - https://ffmpeg.org/                          |
+| Cardboard.dll                | Cardboard (1.3.0)             | General-purpose Gorilla Tag modding library - https://cardboard.sirkingbinx.dev/   |

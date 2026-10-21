@@ -436,7 +436,7 @@ public class ReplayStudio : MonoBehaviour
         else
         {
             try { p.Build().Wait(); }
-            catch (System.Exception ex) { System.Console.WriteLine($"[MonkeFrames::Studio] Build failed: {ex.Message}"); }
+            catch (System.Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Studio] Build failed: {ex.Message}"); }
         }
 
         var frames = p.CompiledKeyframes;
@@ -606,7 +606,7 @@ public class ReplayStudio : MonoBehaviour
         catch (System.Exception ex)
         {
             _previewFailed = true;
-            System.Console.WriteLine($"[MonkeFrames::Studio] Preview disabled: {ex}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Studio] Preview disabled: {ex}");
             UIManager.Instance.Status = "Camera preview couldn't start on this setup.";
         }
     }
@@ -655,7 +655,7 @@ public class ReplayStudio : MonoBehaviour
         {
             string key = panel + ex.GetType().Name + ex.Message;
             if (_reported.Add(key))
-                System.Console.WriteLine($"[MonkeFrames::Studio] {panel} panel error: {ex}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Studio] {panel} panel error: {ex}");
         }
     }
 

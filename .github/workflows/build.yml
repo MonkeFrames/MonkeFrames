@@ -23,10 +23,25 @@ jobs:
         uses: sirkingbinx/setup-gorilla-tag@1.0.0
 
       - name: Build Solution
-        run: dotnet build -c Debug -o ./build
+        run: dotnet build -c Debug -o ./build -p:CI=TRUE
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: ./Build/latest
+
+      - name: Zip files using 7-Zip
+        if: github.ref == 'refs/heads/dev'
+        run: 7z a -r MonkeFrames.zip ./Build/latest
+
+      - name: Publish to MonkeForge dev channel
+        if: github.ref == 'refs/heads/dev'
+        uses: sirkingbinx/monkeforge-ci@1.0.0
+        with:
+          api-key: ${{ secrets.MONKEFORGE_API_KEY }}
+          mod-id: com.monkeframes.monkeframes
+          version: 0.0.0-dev.${{ github.run_number }}
+          channel: dev
+          files: MonkeFrames.zip
+          notes: "Automated dev build from ${{ github.sha }}"

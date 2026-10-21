@@ -116,7 +116,7 @@ public class PostFX : MonoBehaviour
                 catch (System.Exception ex)
                 {
                     Failed = true;
-                    System.Console.WriteLine($"[MonkeFrames::PostFX] Disabled: {ex}");
+                    MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::PostFX] Disabled: {ex}");
                     UIManager.Instance.Status = "Post processing couldn't start on this setup and was turned off.";
                     _output = _src;
                 }

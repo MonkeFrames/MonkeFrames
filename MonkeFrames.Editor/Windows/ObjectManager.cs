@@ -42,7 +42,7 @@ public class ObjectManagerWindow : IEditorWindow
 
         if (GUI.Button(new Rect(w - 214, y - 2, 94, 26), "+ Add", Theme.AccentButton))
         {
-            string file = Win32Utilities.OpenFile("Select obj file", "Object files\0*.obj", SystemUtilities.GetFolder(System.Environment.SpecialFolder.MyDocuments));
+            string file = Win32Utilities.OpenFile("Select obj file", "Object files\0*.obj", Cardboard.CardboardSystem.GetFolderPath(System.Environment.SpecialFolder.MyDocuments));
 
             if (string.IsNullOrEmpty(file))
                 return;

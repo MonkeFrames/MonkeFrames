@@ -14,6 +14,7 @@
 			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Editor.dll" />
 			<MonkeFramesDlls Include="$(OutputPath)\MonkeFrames.Extensions.dll" />
 			<MonkeFramesDlls Include="$(DependenciesPath)\ffmpeg\ffmpeg.exe" />
+			<MonkeFramesDlls Include="$(DependenciesPath)\Cardboard\Cardboard.dll" />
 			<MonkeFramesDlls Include="$(DependenciesPath)\Misc\README.txt" />
 		</ItemGroup>
 

@@ -1,4 +1,5 @@
-using ExitGames.Client.Photon;
+using Cardboard;
+using Cardboard.Classes;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Replays;
 using Photon.Pun;
@@ -16,14 +17,14 @@ namespace MonkeFrames.Editor.Components;
 /// <summary>
 /// Shows where MonkeFrames users are filming from: while your MonkeFrames camera is active
 /// (free cam or any Other Camera), other players who also have MonkeFrames see a camera model
-/// at your camera. You never see your own. Uses a small unreliable Photon event (~12/s),
+/// at your camera. You never see your own. Uses a Cardboard channel (20 updates/s),
 /// only sent to other players in the room, and only understood by MonkeFrames.
 /// </summary>
 public class SpectatorCams : MonoBehaviour
 {
     public static SpectatorCams Instance;
 
-    public const byte EventCode = 163;          // unused by Gorilla Tag
+    private const string ChannelName = "MonkeFrames.SpectatorCams.v2";
     private const float Magic = 7719f;
     private const float SendInterval = 1f / 20f;
     private const double Delay = 0.11;           // interpolation delay (a little over two packets)
@@ -59,7 +60,7 @@ public class SpectatorCams : MonoBehaviour
 
     private float _nextSend;
     private bool _sentHidden = true;
-    private bool _subscribed;
+    private CardboardChannel _channel;
 
     public SpectatorCams() => Instance = this;
 
@@ -69,20 +70,27 @@ public class SpectatorCams : MonoBehaviour
     //  Network
     // =====================================================================
 
-    private void OnEnable() => Subscribe();
+    private void OnEnable()
+    {
+        Subscribe();
+        CardboardEvents.OnLeftRoom += ClearRemoteCameras;
+        CardboardEvents.OnPlayerLeftRoom += OnPlayerLeftRoom;
+    }
 
     private void OnDisable()
     {
-        if (_subscribed && PhotonNetwork.NetworkingClient != null)
-            PhotonNetwork.NetworkingClient.EventReceived -= OnEvent;
-        _subscribed = false;
+        CardboardEvents.OnLeftRoom -= ClearRemoteCameras;
+        CardboardEvents.OnPlayerLeftRoom -= OnPlayerLeftRoom;
+        ClearRemoteCameras();
+        _channel?.Dispose();
+        _channel = null;
     }
 
     private void Subscribe()
     {
-        if (_subscribed || PhotonNetwork.NetworkingClient == null) return;
-        PhotonNetwork.NetworkingClient.EventReceived += OnEvent;
-        _subscribed = true;
+        if (_channel != null || NetworkSystem.Instance == null) return;
+        _channel = new CardboardChannel(ChannelName);
+        _channel.OnReceivedMessage += OnMessage;
     }
 
     /// <summary>True while your MonkeFrames camera is the one being used (free cam, Other Cameras, playback).</summary>
@@ -121,25 +129,22 @@ public class SpectatorCams : MonoBehaviour
 
         try
         {
-            PhotonNetwork.RaiseEvent(EventCode, data,
-                new RaiseEventOptions { Receivers = ReceiverGroup.Others },
-                SendOptions.SendUnreliable);
+            if (_channel == null) return;
+            _channel.SendMessage(data);
             _sentHidden = !share;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::SpectatorCams] Send failed: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::SpectatorCams] Send failed: {ex.Message}");
         }
     }
 
-    private void OnEvent(EventData ev)
+    private void OnMessage(ChannelMessage message)
     {
-        if (ev == null || ev.Code != EventCode)
-            return;
-        if (ev.CustomData is not float[] d || d.Length < 11 || d[0] != Magic)
+        if (message.Sender == null || !message.TryGetValue<float[]>(out var d) || d.Length < 11 || d[0] != Magic)
             return;
 
-        int actor = ev.Sender;
+        int actor = message.Sender.ActorNumber;
         if (!_remote.TryGetValue(actor, out RemoteCam rc))
         {
             rc = new RemoteCam { Actor = actor };
@@ -183,7 +188,7 @@ public class SpectatorCams : MonoBehaviour
             t = senderT + rc.ClockOffset;
         }
 
-        // Keep in time order (unreliable packets can arrive out of order).
+        // Keep snapshots in sender-time order.
         int at = rc.Snaps.Count;
         while (at > 0 && rc.Snaps[at - 1].Time > t) at--;
         if (at > 0 && Math.Abs(rc.Snaps[at - 1].Time - t) < 0.0005) return; // duplicate
@@ -355,12 +360,24 @@ public class SpectatorCams : MonoBehaviour
             }
     }
 
-    private void OnDestroy()
+    private void OnPlayerLeftRoom(PlayerEventArgs args)
+    {
+        var player = args.PhotonUser;
+        if (player == null || !_remote.TryGetValue(player.ActorNumber, out var camera)) return;
+        if (camera.Model != null) Destroy(camera.Model);
+        _remote.Remove(player.ActorNumber);
+    }
+
+    private void ClearRemoteCameras()
     {
         foreach (RemoteCam rc in _remote.Values)
             if (rc.Model != null) Destroy(rc.Model);
         _remote.Clear();
+        _sentHidden = true;
+        _nextSend = 0;
     }
+
+    private void OnDestroy() => OnDisable();
 }
 
 /// <summary>Builds the spectator camera model (from the embedded OBJ) with a name tag and a blinking light.</summary>
@@ -417,7 +434,7 @@ public static class CamModel
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::CamModel] Couldn't load {customName}: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::CamModel] Couldn't load {customName}: {ex.Message}");
             return null;
         }
     }
@@ -474,13 +491,6 @@ public static class CamModel
         if (mr != null)
             mr.sharedMaterial = BodyMaterial(tint);
 
-        Material[] glow = GlowMaterials(tint);
-        if (body != null && glow != null)
-        {
-            Transform inner = body.Find("Glow Inner"), outer = body.Find("Glow Outer");
-            if (inner != null) inner.GetComponent<MeshRenderer>().sharedMaterial = glow[0];
-            if (outer != null) outer.GetComponent<MeshRenderer>().sharedMaterial = glow[1];
-        }
         Light l = body != null ? body.GetComponentInChildren<Light>() : null;
         if (l != null) l.color = tint;
     }
@@ -498,7 +508,7 @@ public static class CamModel
                     if (custom != null)
                     {
                         text = File.ReadAllText(custom);
-                        Console.WriteLine($"[MonkeFrames::CamModel] Using custom model {custom}");
+                        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::CamModel] Using custom model {custom}");
                     }
                     else
                     {
@@ -509,12 +519,12 @@ public static class CamModel
                     _mesh = ObjToMesh(text, out HasUVs);
                     _mesh.name = "MonkeFrames Spectator Camera";
                     if (!HasUVs)
-                        Console.WriteLine("[MonkeFrames::CamModel] The camera model has no proper UV map, so it's drawn without its textures.");
+                        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::CamModel] The camera model has no proper UV map, so it's drawn without its textures.");
                 }
                 catch (Exception ex)
                 {
                     _loadFailed = true;
-                    Console.WriteLine($"[MonkeFrames::CamModel] Couldn't load the camera model: {ex}");
+                    MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::CamModel] Couldn't load the camera model: {ex}");
                 }
             }
             return _mesh;
@@ -720,19 +730,17 @@ public static class CamModel
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::CamModel] Material search failed: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::CamModel] Material search failed: {ex.Message}");
         }
 
         _uberTemplate = best;
-        Console.WriteLine(best != null
+        MonkeFrames.Extensions.FramesLog.Log(best != null
             ? $"[MonkeFrames::CamModel] Using Gorilla Tag shader settings from \"{best.name}\" ({string.Join(" ", best.shaderKeywords)})"
             : "[MonkeFrames::CamModel] No Gorilla Tag material to copy, using URP Lit.");
         return best;
     }
 
     // ---------------- Glow ----------------
-
-    private static Texture2D _glowTight, _glowWide;
     private static Mesh _glowMeshInner, _glowMeshOuter;
     private static bool _glowBuilt;
     private static readonly Dictionary<Color32, Material[]> _glowMats = new();
@@ -894,22 +902,14 @@ public static class CamModel
                 _ = BodyMaterial(tint); // loads the textures
                 if (bodyMesh != null && HasUVs)
                 {
-                    _glowMeshInner = GlowShell(bodyMesh, _glowWide, 0.003f);
-                    _glowMeshOuter = GlowShell(bodyMesh, _glowWide, 0.014f);
+                    _glowMeshInner = GlowShell(bodyMesh, null, 0.003f);
+                    _glowMeshOuter = GlowShell(bodyMesh, null, 0.014f);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MonkeFrames::CamModel] Glow unavailable: {ex.Message}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::CamModel] Glow unavailable: {ex.Message}");
             }
-        }
-
-        Material[] mats = GlowMaterials(tint);
-        if (_glowMeshInner != null && mats != null)
-        {
-            Shell("Glow Inner", _glowMeshInner, mats[0]);
-            if (_glowMeshOuter != null)
-                Shell("Glow Outer", _glowMeshOuter, mats[1]);
         }
 
         GameObject lightGo = new GameObject("Glow Light") { layer = 0 };
@@ -920,29 +920,6 @@ public static class CamModel
         l.intensity = 0.9f;
         l.color = tint;
         l.shadows = LightShadows.None;
-
-        void Shell(string name, Mesh mesh, Material mat)
-        {
-            GameObject g = new GameObject(name) { layer = 0 };
-            g.transform.SetParent(body.transform, false);
-            g.AddComponent<MeshFilter>().sharedMesh = mesh;
-            MeshRenderer r = g.AddComponent<MeshRenderer>();
-            r.sharedMaterial = mat;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            r.receiveShadows = false;
-        }
-    }
-
-    private static Material[] GlowMaterials(Color tint)
-    {
-        if (_glowTight == null || _glowWide == null) return null;
-        tint.a = 1f;
-        Color32 key = tint;
-        if (_glowMats.TryGetValue(key, out Material[] m) && m[0] != null)
-            return m;
-        m = new[] { GlowMaterial(tint, _glowTight, 1.1f), GlowMaterial(tint, _glowWide, 0.55f) };
-        _glowMats[key] = m;
-        return m;
     }
 
     private static Material MakeMaterial(Color color, bool unlit)

@@ -1,29 +1,33 @@
+using Cardboard;
 using BepInEx;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
 using System;
 using UnityEngine;
 using MonkeFrames.Extensions;
-using MonkeFrames.Editor.Utilities;
-
-#if DEBUG
-using System.Runtime.InteropServices;
-#endif
 
 namespace MonkeFrames.Editor;
 
+[BepInDependency("dev.sirkingbinx.cardboard", "1.3.0")]
 [BepInPlugin(Constants.Guid, Constants.Name, Constants.Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public void Start()
+    public void Awake()
     {
-        HarmonyLib.Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, Constants.Guid);
-        GorillaTagger.OnPlayerSpawned(OnPlayerSpawned);
+        CardboardHarmony.PatchInstance(this);
+        CardboardEvents.OnPlayerSpawned += OnPlayerSpawned;
+    }
+
+    private void OnDestroy()
+    {
+        CardboardEvents.OnPlayerSpawned -= OnPlayerSpawned;
+        Application.quitting -= OnMonkeFramesUnloaded;
+        CardboardHarmony.UnpatchInstance();
     }
 
     public static void OnPlayerSpawned()
     {
-        Console.WriteLine("[MonkeFrames::Initialize] Initializing MonkeFrames...");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Initialize] Initializing MonkeFrames...");
 
         Constants.Init();
 
@@ -40,23 +44,14 @@ public class Plugin : BaseUnityPlugin
         tpc.AddComponent<Replays.ReplayManager>();
         tpc.AddComponent<Mocap.MocapManager>();
 
-        Console.WriteLine("[MonkeFrames::Initialize] All components added");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Initialize] All components added");
 
         Application.quitting += OnMonkeFramesUnloaded;
     }
 
     public static Action OnMonkeFramesLoaded = () =>
     {
-        Console.WriteLine("[MonkeFrames::Extensions] Initializing extensions...");
-        
-        ExtensionManager.Init(); // halts thread, don't need an await here
-
-        ExtensionUtilities.CreateMenus();
-        ExtensionUtilities.CreateWindows();
-
-        Console.WriteLine($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
-
-        Console.WriteLine($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
 
         Settings.Load();
 
@@ -70,57 +65,22 @@ public class Plugin : BaseUnityPlugin
                 !string.Equals(System.IO.Path.GetDirectoryName(compilerPath), editorDir, StringComparison.OrdinalIgnoreCase))
             {
                 string msg = $"Warning: MonkeFrames.Compiler.dll is being loaded from \"{compilerPath}\" instead of the plugin folder. Remove that copy and restart the game.";
-                Console.WriteLine("[MonkeFrames::Initialize] " + msg);
+                MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Initialize] " + msg);
                 UIManager.Instance.Status = msg;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Initialize] Could not verify compiler location: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Initialize] Could not verify compiler location: {ex.Message}");
         }
 
         CameraManager.Instance.SetModEnabled(true);
+        CameraModes.Instance?.LoadSettings(Settings.current.Sources);
     };
 
     public static Action OnMonkeFramesUnloaded = () =>
     {
         Settings.Save();
+        ExtensionManager.CallMethod("OnUnload");
     };
-
-#if DEBUG
-    Plugin()
-    {
-        AllocConsole();
-
-        Console.SetOut(new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
-        Console.SetError(new System.IO.StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
-
-        Console.Title = $"MonkeFrames {Constants.VersionID} (Build {Constants.BuildDate})";
-
-        Console.WriteLine($"MonkeFrames Debug Build {Constants.VersionID} (Build {Constants.BuildDate})");
-
-        Application.logMessageReceived += HandleLogMsg;
-
-        Application.quitting += () => {
-            Application.logMessageReceived -= HandleLogMsg;
-            FreeConsole();
-        };
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AllocConsole();
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool FreeConsole();
-
-    private static void HandleLogMsg(string logString, string stackTrace, LogType type)
-    {
-        if (type == LogType.Exception && stackTrace.Contains("MonkeFrames"))
-        {
-            Console.Error.WriteLine("An unhandled exception occured.");
-            Console.Error.WriteLine($"Message:     {logString}");
-            Console.Error.WriteLine($"Stack Trace: {stackTrace}");
-        }
-    }
-#endif
 }

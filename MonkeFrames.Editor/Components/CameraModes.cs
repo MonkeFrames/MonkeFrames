@@ -1,4 +1,5 @@
 using MonkeFrames.Editor.Replays;
+using MonkeFrames.Editor.Classes;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -305,6 +306,103 @@ public class CameraModes : MonoBehaviour
         HandRight = true; HandLookAtFace = true;
         DirectorInterval = 6f; DirectorBlend = true;
         UIManager.Instance.Status = "Camera settings reset.";
+    }
+
+    /// <summary>Restore the Sources window's last saved mode and camera options.</summary>
+    public void LoadSettings(SourcesSettings settings)
+    {
+        if (settings == null) return;
+
+        FieldOfView = settings.FieldOfView;
+        Smoothing = settings.Smoothing;
+        PositionLag = settings.PositionLag;
+        LookHeight = settings.LookHeight;
+        Dutch = settings.Dutch;
+        Shake = settings.Shake;
+        MotionBlur = settings.MotionBlur;
+        MotionBlurStrength = settings.MotionBlurStrength;
+
+        OrbitAutoSpin = settings.OrbitAutoSpin;
+        OrbitSpeed = settings.OrbitSpeed;
+        OrbitDistance = settings.OrbitDistance;
+        OrbitHeight = settings.OrbitHeight;
+        OrbitAngle = settings.OrbitAngle;
+        OrbitRelative = settings.OrbitRelative;
+
+        LevelHorizon = settings.LevelHorizon;
+        ForwardOffset = settings.ForwardOffset;
+        FollowDistance = settings.FollowDistance;
+        FollowHeight = settings.FollowHeight;
+        FollowSide = settings.FollowSide;
+        FollowTurnLag = settings.FollowTurnLag;
+        ShoulderSide = settings.ShoulderSide;
+        ShoulderBack = settings.ShoulderBack;
+        ShoulderHeight = settings.ShoulderHeight;
+        TrackingAutoZoom = settings.TrackingAutoZoom;
+        TrackingFrame = settings.TrackingFrame;
+        FrontDistance = settings.FrontDistance;
+        FrontHeight = settings.FrontHeight;
+        TopHeight = settings.TopHeight;
+        TopRotate = settings.TopRotate;
+        SideAngle = settings.SideAngle;
+        SideDistance = settings.SideDistance;
+        SideHeight = settings.SideHeight;
+        HandRight = settings.HandRight;
+        HandLookAtFace = settings.HandLookAtFace;
+        DirectorInterval = settings.DirectorInterval;
+        DirectorBlend = settings.DirectorBlend;
+
+        CameraMode savedMode = System.Enum.IsDefined(typeof(CameraMode), settings.Mode)
+            ? (CameraMode)settings.Mode
+            : CameraMode.Free;
+        if (savedMode != Mode)
+            SetMode(savedMode);
+    }
+
+    /// <summary>Copy the current Sources window options into the user settings before saving.</summary>
+    public void SaveSettings(SourcesSettings settings)
+    {
+        if (settings == null) return;
+
+        settings.Mode = (int)Mode;
+        settings.FieldOfView = FieldOfView;
+        settings.Smoothing = Smoothing;
+        settings.PositionLag = PositionLag;
+        settings.LookHeight = LookHeight;
+        settings.Dutch = Dutch;
+        settings.Shake = Shake;
+        settings.MotionBlur = MotionBlur;
+        settings.MotionBlurStrength = MotionBlurStrength;
+
+        settings.OrbitAutoSpin = OrbitAutoSpin;
+        settings.OrbitSpeed = OrbitSpeed;
+        settings.OrbitDistance = OrbitDistance;
+        settings.OrbitHeight = OrbitHeight;
+        settings.OrbitAngle = OrbitAngle;
+        settings.OrbitRelative = OrbitRelative;
+
+        settings.LevelHorizon = LevelHorizon;
+        settings.ForwardOffset = ForwardOffset;
+        settings.FollowDistance = FollowDistance;
+        settings.FollowHeight = FollowHeight;
+        settings.FollowSide = FollowSide;
+        settings.FollowTurnLag = FollowTurnLag;
+        settings.ShoulderSide = ShoulderSide;
+        settings.ShoulderBack = ShoulderBack;
+        settings.ShoulderHeight = ShoulderHeight;
+        settings.TrackingAutoZoom = TrackingAutoZoom;
+        settings.TrackingFrame = TrackingFrame;
+        settings.FrontDistance = FrontDistance;
+        settings.FrontHeight = FrontHeight;
+        settings.TopHeight = TopHeight;
+        settings.TopRotate = TopRotate;
+        settings.SideAngle = SideAngle;
+        settings.SideDistance = SideDistance;
+        settings.SideHeight = SideHeight;
+        settings.HandRight = HandRight;
+        settings.HandLookAtFace = HandLookAtFace;
+        settings.DirectorInterval = DirectorInterval;
+        settings.DirectorBlend = DirectorBlend;
     }
 
     public static string PlayerName(VRRig rig)

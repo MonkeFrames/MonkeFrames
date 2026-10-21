@@ -60,7 +60,7 @@ public class CameraManager : MonoBehaviour
         Position = gameObject.transform.position;
         Rotation = gameObject.transform.rotation;
 
-        Console.WriteLine("[MonkeFrames::CameraManager] All camera-based stuff should be set up");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::CameraManager] All camera-based stuff should be set up");
     }
 
     public void SetModEnabled(bool enabled)
@@ -93,7 +93,6 @@ public class CameraManager : MonoBehaviour
 
         if (Camera == null)
             Camera = gameObject.GetComponent<Camera>();
-
 
         // Update values
         if (!Manual)
@@ -309,7 +308,7 @@ public class CameraManager : MonoBehaviour
         brain.enabled = enabled;
 
         CinemachineState = enabled;
-        Console.WriteLine($"[MonkeFrames::CameraManager] Cinemachine on TPC is now {(enabled ? "activated" : "deactivated")}");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::CameraManager] Cinemachine on TPC is now {(enabled ? "activated" : "deactivated")}");
     }
 
     int playbackPosition = 0;
@@ -396,6 +395,10 @@ public class CameraManager : MonoBehaviour
             }
 
             Keyframe currentFrame = kCache[playbackPosition];
+
+            foreach (FramesExtension extension in ExtensionManager.Plugins.Values)
+                extension.OnKeyframeStep(ref currentFrame);
+
             Blur.Set(currentFrame.MotionBlur, currentFrame.MotionBlurStrength);
 
             Position = currentFrame.Position;
@@ -492,7 +495,7 @@ public class CameraManager : MonoBehaviour
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MonkeFrames::Export] Could not prepare replay voice audio: {ex}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Export] Could not prepare replay voice audio: {ex}");
                 CleanupExportAudio();
                 UIManager.Instance.Status = "Replay audio could not be prepared; exporting video without audio.";
             }
@@ -500,7 +503,7 @@ public class CameraManager : MonoBehaviour
 
         bool hasMusicAudio = !string.IsNullOrEmpty(project.AudioPath) && File.Exists(project.AudioPath);
 
-        Console.WriteLine("==== FFMPEG ENCODE STATS ====");
+        MonkeFrames.Extensions.FramesLog.Log("==== FFMPEG ENCODE STATS ====");
 
         string arguments;
         if (hasVoiceAudio && hasMusicAudio)
@@ -539,9 +542,9 @@ public class CameraManager : MonoBehaviour
                         $"-y \"{exportOutputPath}\"";
         }
 
-        Console.WriteLine($"Arguments: {arguments}");
+        MonkeFrames.Extensions.FramesLog.Log($"Arguments: {arguments}");
 
-        Console.WriteLine("==== OK I'M DONE ====");
+        MonkeFrames.Extensions.FramesLog.Log("==== OK I'M DONE ====");
 
         ffmpegProcess = Process.Start(new ProcessStartInfo
         {
@@ -621,7 +624,7 @@ public class CameraManager : MonoBehaviour
         }
 
         try { Process.Start("explorer.exe", $"/select,\"{path}\""); }
-        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Export] Could not open exported video location: {ex.Message}"); }
+        catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Export] Could not open exported video location: {ex.Message}"); }
         UIManager.Instance.Status = $"Exported {path}";
     }
 
@@ -629,7 +632,7 @@ public class CameraManager : MonoBehaviour
     {
         if (string.IsNullOrEmpty(exportAudioPath)) return;
         try { if (File.Exists(exportAudioPath)) File.Delete(exportAudioPath); }
-        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Export] Could not remove temporary audio: {ex.Message}"); }
+        catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Export] Could not remove temporary audio: {ex.Message}"); }
         exportAudioPath = null;
     }
 

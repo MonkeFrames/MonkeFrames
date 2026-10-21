@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Utilities;
+using MonkeFrames.Extensions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Keyframe = MonkeFrames.Compiler.Models.Keyframe;
@@ -60,12 +61,12 @@ public class KeyframeManager : MonoBehaviour
     public void Start()
     {
         Instance = this;
-        Console.WriteLine("[MonkeFrames::KeyframeManager] creating new project \"new project\"");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::KeyframeManager] creating new project \"new project\"");
 
         Project = new Project("new project", Constants.Exporter);
         Project.FPS = 60;
 
-        Console.WriteLine("[MonkeFrames::KeyframeManager] Keyframe manager is running");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::KeyframeManager] Keyframe manager is running");
     }
 
     public void Update()
@@ -133,20 +134,24 @@ public class KeyframeManager : MonoBehaviour
     public void StartBuild()
     {
         Task.Run(async () => {
+            ExtensionManager.CallMethod("OnCompilationStart", Project);
             IsCompiling = true;
             await Task.Delay(100); // give frame time to process
             await Project.Build();
             IsCompiling = false;
+            ExtensionManager.CallMethod("OnCompilationEnd", Project);
         }); 
     }
 
     public void StartBuildAndRun()
     {
         Task.Run(async () => {
+            ExtensionManager.CallMethod("OnCompilationStart");
             IsCompiling = true;
             await Task.Delay(100); // give frame time to process
             await Project.Build();
             IsCompiling = false;
+            ExtensionManager.CallMethod("OnCompilationEnd");
             CameraManager.Instance.StartPlayback();
         });
     }
