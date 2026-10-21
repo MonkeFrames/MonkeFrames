@@ -122,7 +122,7 @@ public class IEditorWindowManager
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error drawing window \"{Window.Name}\" ({WindowID}): {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"Error drawing window \"{Window.Name}\" ({WindowID}): {ex.Message}");
         }
 
         GUI.DragWindow(new Rect(0, 0, w - 32, Theme.TitleHeight));

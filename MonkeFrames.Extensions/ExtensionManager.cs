@@ -55,30 +55,31 @@ public static class ExtensionManager
         }
         catch (Exception ex)
         {
-            Console.WriteLine(ex);
+            MonkeFrames.Extensions.FramesLog.Log(ex);
             return;
         }
 
-        List<(FramesExtension.Info, FramesExtension)> plugins =
-            FramesReflection.GetInstancesOfTypeWithAttribute<FramesExtension.Info, FramesExtension>(assembly);
-
-        foreach ((FramesExtension.Info, FramesExtension) pluginData in plugins)
+        // Cardboard's attribute discovery scans the whole AppDomain. Keep this scoped
+        // and filter before construction, so reloads and unannotated helper types are safe.
+        foreach (var type in assembly.GetTypes().Where(type =>
+                     typeof(FramesExtension).IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface))
         {
-            FramesExtension.Info metadata = pluginData.Item1;
-            FramesExtension plugin = pluginData.Item2;
+            var metadata = type.GetCustomAttribute<FramesExtension.Info>();
+            if (metadata == null) continue;
+            var plugin = (FramesExtension)Activator.CreateInstance(type);
 
             Plugins[metadata] = plugin;
 
-            Console.WriteLine($"Loaded plugin [{metadata.Name} {metadata.Version}] ({metadata.GUID})");
+            MonkeFrames.Extensions.FramesLog.Log($"Loaded plugin [{metadata.Name} {metadata.Version}] ({metadata.GUID})");
 
             try { plugin.OnLoad(); }
-            catch (Exception ex) { Console.WriteLine($"Extension [{metadata.Name}] failed during OnLoad: {ex}"); }
+            catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"Extension [{metadata.Name}] failed during OnLoad: {ex}"); }
         }
     }
 
     public static void Init()
     {
-        string pluginsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        string pluginsFolder = Path.Combine(Cardboard.CardboardSystem.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "MonkeFrames", "extensions");
 
         if (!Directory.Exists(pluginsFolder))
@@ -139,9 +140,9 @@ public static class ExtensionManager
                 pluginPair.Value.OnUnload();
 
                 if (HarmonyInstances[pluginPair.Key.GUID] is Harmony harmony)
-                    harmony.UnpatchSelf();
+                    Cardboard.CardboardHarmony.UnpatchInstance(harmony);
             }
-            catch (Exception ex) { Console.WriteLine($"Extension failed during OnUnload: {ex}"); }
+            catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"Extension failed during OnUnload: {ex}"); }
         }
 
         HarmonyInstances.Clear();

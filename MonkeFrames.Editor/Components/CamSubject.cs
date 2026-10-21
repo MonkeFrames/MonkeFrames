@@ -57,9 +57,9 @@ public class LiveSubject : CamSubject
     public override Transform Hand(bool right)
     {
         VRRig rig = Rig;
-        if (rig.isOfflineVRRig && GorillaTagger.Instance != null)
+        if (rig.isOfflineVRRig && GorillaLocomotion.GTPlayer.Instance != null)
         {
-            Transform t = right ? GorillaTagger.Instance.rightHandTransform : GorillaTagger.Instance.leftHandTransform;
+            Transform t = right ? Cardboard.CardboardPlayer.RightHandTransform : Cardboard.CardboardPlayer.LeftHandTransform;
             if (t != null) return t;
         }
 

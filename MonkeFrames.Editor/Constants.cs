@@ -1,10 +1,10 @@
 using MonkeFrames.Compiler.Models;
-using MonkeFrames.Editor.Utilities;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Cardboard;
 
 namespace MonkeFrames.Editor;
 
@@ -34,11 +34,11 @@ public static class Constants
 
     public static void Init()
     {
-        DataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
+        DataFolder = Path.Combine(CardboardSystem.GetFolderPath(Environment.SpecialFolder.MyDocuments), "MonkeFrames");
 
         string[] folders = ["projects", "exports", "replays", "mocap", "objects", "extensions"];
         foreach (string folder in folders)
-            Directory.CreateDirectory(SystemUtilities.Combine(DataFolder, folder));
+            Directory.CreateDirectory(Path.Combine(DataFolder, folder));
 
             MonkeFramesAssemblyFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
     }

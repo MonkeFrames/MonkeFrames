@@ -180,13 +180,13 @@ public class Settings
             Converters = { new ColorConverter() }
         };
 
-        if (!File.Exists(SystemUtilities.Combine(Constants.DataFolder, "config.json")))
+        if (!File.Exists(System.IO.Path.Combine(Constants.DataFolder, "config.json")))
         {
             current = new Settings();
             return;
         }
 
-        string prefs = File.ReadAllText(SystemUtilities.Combine(Constants.DataFolder, "config.json"));
+        string prefs = File.ReadAllText(System.IO.Path.Combine(Constants.DataFolder, "config.json"));
         current = JsonConvert.DeserializeObject<Settings>(prefs, settings) ?? new Settings();
         current.Sources ??= new SourcesSettings();
     }
@@ -206,7 +206,7 @@ public class Settings
         string json = JsonConvert.SerializeObject(current, settings);
 
         Directory.CreateDirectory(Constants.DataFolder);
-        File.WriteAllText(SystemUtilities.Combine(Constants.DataFolder, "config.json"), json);
+        File.WriteAllText(System.IO.Path.Combine(Constants.DataFolder, "config.json"), json);
 
         KeyframeManager.Instance.RefreshOrbs();
     }

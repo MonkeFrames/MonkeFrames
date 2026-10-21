@@ -237,7 +237,7 @@ public static class PuppetBuilder
                                 if (index >= 0 && index < boneXforms.Length) AddMoving(boneXforms[index]);
                             }
         }
-        catch (System.Exception ex) { System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic anchors unavailable while recording: {ex.Message}"); }
+        catch (System.Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Cosmetic anchors unavailable while recording: {ex.Message}"); }
 
         var paths = new List<string>();
         var live = new List<Transform>();
@@ -292,7 +292,7 @@ public static class PuppetBuilder
         }
         catch (System.Exception ex)
         {
-            System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic lookup failed: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Cosmetic lookup failed: {ex.Message}");
         }
         return set;
     }
@@ -369,7 +369,7 @@ public static class PuppetBuilder
             {
                 loadCatalog = controller.V2_allCosmeticsInfoAssetRefSO_LoadCoroutine();
             }
-            catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [1]: {ex.Message}"); }
+            catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Could not load cosmetics in replay [1]: {ex.Message}"); }
 
             if (loadCatalog != null)
                 yield return controller.StartCoroutine(loadCatalog);
@@ -377,7 +377,7 @@ public static class PuppetBuilder
 
         if (!GTHardCodedBones.TryGetBoneXforms(rig, out Transform[] sourceBones, out string error))
         {
-            if (!string.IsNullOrEmpty(error)) Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [2]: {error}");
+            if (!string.IsNullOrEmpty(error)) MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Could not load cosmetics in replay [2]: {error}");
             yield break;
         }
 
@@ -410,7 +410,7 @@ public static class PuppetBuilder
 
                     if (instance == null)
                     {
-                        Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [3]: {info.displayName}");
+                        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Could not load cosmetics in replay [3]: {info.displayName}");
                         continue;
                     }
 
@@ -671,7 +671,7 @@ public static class PuppetBuilder
         }
         catch (Exception ex)
         {
-            System.Console.WriteLine($"[MonkeFrames::Replay] Could not create replay name tag: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Could not create replay name tag: {ex.Message}");
         }
     }
 

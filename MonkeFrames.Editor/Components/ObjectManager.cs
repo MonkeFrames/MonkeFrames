@@ -66,12 +66,12 @@ public class ObjectManager : MonoBehaviour
             if (!Directory.Exists(folder))
             {
                 Directory.CreateDirectory(folder);
-                Console.WriteLine($"[MonkeFrames::ObjectManager] Created Objects folder at: {folder}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Created Objects folder at: {folder}");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::ObjectManager] Could not create Objects folder: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Could not create Objects folder: {ex.Message}");
         }
     }
 
@@ -91,7 +91,7 @@ public class ObjectManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::ObjectManager] Error scanning Objects folder: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Error scanning Objects folder: {ex.Message}");
             return new List<string>();
         }
     }
@@ -107,7 +107,7 @@ public class ObjectManager : MonoBehaviour
         string fullPath = Path.Combine(ObjectsFolder, objFileName);
         if (!File.Exists(fullPath))
         {
-            Console.WriteLine($"[MonkeFrames::ObjectManager] File not found: {fullPath}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] File not found: {fullPath}");
             return null;
         }
 
@@ -122,12 +122,12 @@ public class ObjectManager : MonoBehaviour
                 return mesh;
             }
 
-            Console.WriteLine($"[MonkeFrames::ObjectManager] .obj file '{objFileName}' produced an empty mesh.");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] .obj file '{objFileName}' produced an empty mesh.");
             return null;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::ObjectManager] Failed to load/parse '{objFileName}': {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Failed to load/parse '{objFileName}': {ex.Message}");
             return null;
         }
     }
@@ -150,11 +150,11 @@ public class ObjectManager : MonoBehaviour
                     {
                         string texFileName = line.Substring(6).Trim().Trim('"', '\'');
                         string texPath = Path.Combine(folder, Path.GetFileName(texFileName));
-                        Console.WriteLine($"[MonkeFrames::ObjectManager] Trying to load MTL texture from: {texPath}");
+                        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Trying to load MTL texture from: {texPath}");
                         Texture2D mtlTex = LoadTextureFromFile(texPath);
                         if (mtlTex != null)
                         {
-                            Console.WriteLine($"[MonkeFrames::ObjectManager] Successfully loaded MTL texture.");
+                            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Successfully loaded MTL texture.");
                             return (true, mtlTex);
                         }
                     }
@@ -162,7 +162,7 @@ public class ObjectManager : MonoBehaviour
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MonkeFrames::ObjectManager] Error reading .mtl file '{mtlPath}': {ex.Message}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Error reading .mtl file '{mtlPath}': {ex.Message}");
                 return (false, null);
             }
         }
@@ -172,11 +172,11 @@ public class ObjectManager : MonoBehaviour
         foreach (string ext in exts)
         {
             string candidate = Path.Combine(folder, baseName + ext);
-            Console.WriteLine($"[MonkeFrames::ObjectManager] Trying fallback texture: {candidate}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Trying fallback texture: {candidate}");
             Texture2D imgTex = LoadTextureFromFile(candidate);
             if (imgTex != null)
             {
-                Console.WriteLine($"[MonkeFrames::ObjectManager] Successfully loaded fallback texture.");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Successfully loaded fallback texture.");
                 return (true, imgTex);
             }
         }
@@ -202,7 +202,7 @@ public class ObjectManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::ObjectManager] Error loading texture from '{filePath}': {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::ObjectManager] Error loading texture from '{filePath}': {ex.Message}");
         }
 
         return null;

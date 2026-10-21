@@ -34,7 +34,7 @@ public static class NotificationSound
         }
         catch (System.Exception ex)
         {
-            System.Console.WriteLine($"[MonkeFrames::Sound] Could not play notification sound: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Sound] Could not play notification sound: {ex.Message}");
         }
     }
 

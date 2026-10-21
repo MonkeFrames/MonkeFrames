@@ -79,12 +79,12 @@ public class MocapManager : MonoBehaviour
             if (!Directory.Exists(folder))
             {
                 Directory.CreateDirectory(folder);
-                Console.WriteLine($"[MonkeFrames::Mocap] Created mocap directory: {folder}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Created mocap directory: {folder}");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Mocap] Error creating mocap directory: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Error creating mocap directory: {ex.Message}");
         }
     }
 
@@ -164,20 +164,20 @@ public class MocapManager : MonoBehaviour
                 ?? FindChildRecursive(root, "hand.L")
                 ?? (rig.leftHandTransform != null ? rig.leftHandTransform : null)
                 ?? (rig.leftHand != null ? rig.leftHand.rigTarget : null)
-                ?? (GorillaTagger.Instance != null ? GorillaTagger.Instance.leftHandTransform : null);
+                ?? (GorillaLocomotion.GTPlayer.Instance != null ? Cardboard.CardboardPlayer.LeftHandTransform : null);
 
             RightHandTarget = root.Find("rig/hand.R")
                 ?? FindChildRecursive(root, "hand.R")
                 ?? (rig.rightHandTransform != null ? rig.rightHandTransform : null)
                 ?? (rig.rightHand != null ? rig.rightHand.rigTarget : null)
-                ?? (GorillaTagger.Instance != null ? GorillaTagger.Instance.rightHandTransform : null);
+                ?? (GorillaLocomotion.GTPlayer.Instance != null ? Cardboard.CardboardPlayer.RightHandTransform : null);
 
-            Console.WriteLine($"[MonkeFrames::Mocap] Resolved tracking targets -> Head: '{HeadTarget?.name}', Body: '{BodyTarget?.name}', LH: '{LeftHandTarget?.name}', RH: '{RightHandTarget?.name}'");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Resolved tracking targets -> Head: '{HeadTarget?.name}', Body: '{BodyTarget?.name}', LH: '{LeftHandTarget?.name}', RH: '{RightHandTarget?.name}'");
             return HeadTarget != null && LeftHandTarget != null && RightHandTarget != null;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Mocap] Error resolving tracking targets: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Error resolving tracking targets: {ex.Message}");
             return false;
         }
     }
@@ -186,7 +186,7 @@ public class MocapManager : MonoBehaviour
     {
         if (State == MocapRecordingState.Recording || State == MocapRecordingState.Saving)
         {
-            Console.WriteLine("[MonkeFrames::Mocap] Cannot start recording: already recording or saving.");
+            MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Mocap] Cannot start recording: already recording or saving.");
             return false;
         }
 
@@ -194,7 +194,7 @@ public class MocapManager : MonoBehaviour
         {
             StatusMessage = "Cannot record: Local Gorilla rig not found.";
             UIManager.Instance.Status = StatusMessage;
-            Console.WriteLine($"[MonkeFrames::Mocap] {StatusMessage}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] {StatusMessage}");
             return false;
         }
 
@@ -243,7 +243,7 @@ public class MocapManager : MonoBehaviour
     {
         if (!_isRecording || State != MocapRecordingState.Recording)
         {
-            Console.WriteLine("[MonkeFrames::Mocap] Cannot stop recording: not currently recording.");
+            MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Mocap] Cannot stop recording: not currently recording.");
             return;
         }
 
@@ -326,11 +326,11 @@ public class MocapManager : MonoBehaviour
         {
             leftIndex = Mathf.Clamp01(ControllerInputPoller.instance.leftControllerIndexFloat);
             leftMiddle = Mathf.Clamp01(ControllerInputPoller.instance.leftControllerGripFloat);
-            leftThumb = (ControllerInputPoller.instance.leftControllerSecondaryButton || ControllerInputPoller.instance.leftControllerPrimaryButton) ? 1.0f : 0.0f;
+            leftThumb = (Cardboard.CardboardInput.LeftSecondary || Cardboard.CardboardInput.LeftPrimary) ? 1.0f : 0.0f;
 
             rightIndex = Mathf.Clamp01(ControllerInputPoller.instance.rightControllerIndexFloat);
             rightMiddle = Mathf.Clamp01(ControllerInputPoller.instance.rightControllerGripFloat);
-            rightThumb = (ControllerInputPoller.instance.rightControllerSecondaryButton || ControllerInputPoller.instance.rightControllerPrimaryButton) ? 1.0f : 0.0f;
+            rightThumb = (Cardboard.CardboardInput.RightSecondary || Cardboard.CardboardInput.RightPrimary) ? 1.0f : 0.0f;
         }
         else if (CurrentRig != null)
         {
@@ -365,7 +365,7 @@ public class MocapManager : MonoBehaviour
     {
         if (State != MocapRecordingState.ReadyToSave || CurrentRecording == null)
         {
-            Console.WriteLine("[MonkeFrames::Mocap] Cannot save: no recording ready to save.");
+            MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Mocap] Cannot save: no recording ready to save.");
             return false;
         }
 
@@ -415,7 +415,7 @@ public class MocapManager : MonoBehaviour
             State = MocapRecordingState.Idle;
             StatusMessage = $"Saved: {Path.GetFileName(targetPath)} ({recordingToSave.FrameCount} frames)";
             UIManager.Instance.Status = $"Mocap: Successfully saved {Path.GetFileName(targetPath)}";
-            Console.WriteLine($"[MonkeFrames::Mocap] Successfully saved recording to: {targetPath}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Successfully saved recording to: {targetPath}");
             CurrentRecording = null;
             return true;
         }
@@ -424,7 +424,7 @@ public class MocapManager : MonoBehaviour
             State = MocapRecordingState.ReadyToSave;
             StatusMessage = $"Save failed: {errorMsg}";
             UIManager.Instance.Status = $"Mocap save error: {errorMsg}";
-            Console.WriteLine($"[MonkeFrames::Mocap] Error saving mocap file: {errorMsg}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Error saving mocap file: {errorMsg}");
             return false;
         }
     }
@@ -443,7 +443,7 @@ public class MocapManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Mocap] Error listing recordings: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Mocap] Error listing recordings: {ex.Message}");
             return new List<FileInfo>();
         }
     }

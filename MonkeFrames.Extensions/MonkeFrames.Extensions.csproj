@@ -16,8 +16,15 @@
 	</ItemGroup>
 
     <ItemGroup>
+        <Reference Include="BepInEx"><HintPath>$(BepInExAssemblyPath)/BepInEx.dll</HintPath></Reference>
         <Reference Include="0Harmony">
             <HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
+        </Reference>
+    </ItemGroup>
+    <ItemGroup>
+        <Reference Include="Cardboard">
+            <HintPath>$(CardboardAssemblyPath)</HintPath>
+            <Private>true</Private>
         </Reference>
     </ItemGroup>
 </Project>

@@ -64,7 +64,7 @@ public class UIManager : MonoBehaviour
 
     public void Start()
     {
-        Console.WriteLine("[MonkeFrames::UIManager] Loading titlebar icon");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::UIManager] Loading titlebar icon");
 
         using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("icon");
         using MemoryStream data = new MemoryStream();
@@ -87,56 +87,31 @@ public class UIManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::UIManager] Could not load intro logo: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::UIManager] Could not load intro logo: {ex.Message}");
         }
 
-        Console.WriteLine("[MonkeFrames::UIManager] Initializing managers...");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::UIManager] Initializing managers...");
 
-        // GetTypes() walks the whole editor assembly and is relatively expensive. Do it
-        // once, then classify the results for both registries.
-        Type[] editorTypes = Assembly.GetExecutingAssembly().GetLoadableTypes().ToArray();
-        List<Type> windowTypes = new();
-        List<Type> menuTypes = new();
-        foreach (Type type in editorTypes)
-        {
-            if (!type.IsClass || type.IsAbstract)
-                continue;
-
-            if (typeof(IEditorWindow).IsAssignableFrom(type))
-                windowTypes.Add(type);
-            if (typeof(IEditorMenu).IsAssignableFrom(type))
-                menuTypes.Add(type);
-        }
-
-        foreach (Type windowType in windowTypes)
-        {
-            if (Activator.CreateInstance(windowType) is not IEditorWindow window)
-                continue;
-
+        var editorAssemblies = new[] { typeof(UIManager).Assembly };
+        foreach (var window in Cardboard.CardboardReflection.GetInstancesOfInterface<IEditorWindow>(editorAssemblies))
             Windows.Add(new IEditorWindowManager(window));
-        }
 
-        foreach (Type menuType in menuTypes)
-        {
-            if (Activator.CreateInstance(menuType) is not IEditorMenu menu)
-                continue;
-
+        foreach (var menu in Cardboard.CardboardReflection.GetInstancesOfInterface<IEditorMenu>(editorAssemblies))
             Menus.Add(new IEditorMenuManager(menu));
-        }
 
-        Console.WriteLine("[MonkeFrames::Extensions] Initializing extensions...");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Extensions] Initializing extensions...");
 
         ExtensionManager.Init();
 
-        Console.WriteLine($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
-        Console.WriteLine($"[MonkeFrames::Extensions] Creating extension menus and windows");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Extensions] {ExtensionManager.Plugins.Count} extensions loaded");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Extensions] Creating extension menus and windows");
 
         ExtensionUtilities.CreateMenus();
         ExtensionUtilities.CreateWindows();
 
         Menus = Menus.OrderBy(m => m.Index).ToList();
 
-        Console.WriteLine("[MonkeFrames::UIManager] UI manager is running");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::UIManager] UI manager is running");
 
         Plugin.OnMonkeFramesLoaded.Invoke();
     }
@@ -169,13 +144,13 @@ public class UIManager : MonoBehaviour
     public void OpenWindow(string menuName)
     {
         Windows.First(w => w.Window.Name == menuName).Visible = true;
-        Console.WriteLine($"[MonkeFrames::UIManager] {menuName}.Visible = true;");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::UIManager] {menuName}.Visible = true;");
     }
 
     public void CloseWindow(string menuName)
     {
         Windows.First(w => w.Window.Name == menuName).Visible = false;
-        Console.WriteLine($"[MonkeFrames::UIManager] {menuName}.Visible = false;");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::UIManager] {menuName}.Visible = false;");
     }
 
     public void ToggleWindow(string menuName)
@@ -183,7 +158,7 @@ public class UIManager : MonoBehaviour
         var w = Windows.FirstOrDefault(w => w.Window.Name == menuName);
         if (w != null)
             w.Visible = !w.Visible;
-        Console.WriteLine($"[MonkeFrames::UIManager] {menuName}.Visible = {w?.Visible ?? false};");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::UIManager] {menuName}.Visible = {w?.Visible ?? false};");
     }
 
     public void ReloadExtensions()
@@ -200,7 +175,7 @@ public class UIManager : MonoBehaviour
         Menus = Menus.OrderBy(m => m.Index).ToList();
 
         Status = $"Reloaded {ExtensionManager.Plugins.Count} extension(s)";
-        Console.WriteLine($"[MonkeFrames::Extensions] Reloaded {ExtensionManager.Plugins.Count} extensions");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Extensions] Reloaded {ExtensionManager.Plugins.Count} extensions");
     }
 
     public void Update()
@@ -282,7 +257,7 @@ public class UIManager : MonoBehaviour
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[MonkeFrames::Menu] \"{item.Name}\" shortcut failed: {ex.InnerException?.Message ?? ex.Message}");
+                    MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Menu] \"{item.Name}\" shortcut failed: {ex.InnerException?.Message ?? ex.Message}");
                 }
 
                 CurrentMenuIndex = -1;

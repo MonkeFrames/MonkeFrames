@@ -817,4 +817,9 @@
           <HintPath>$(GameAssemblyPath)\ZString.dll</HintPath>
         </Reference>
     </ItemGroup>
+    <ItemGroup>
+        <Reference Include="Cardboard">
+          <HintPath>$(DependenciesPath)\Cardboard\Cardboard.dll</HintPath>
+        </Reference>
+    </ItemGroup>
 </Project>

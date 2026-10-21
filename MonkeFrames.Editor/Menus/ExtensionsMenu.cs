@@ -24,7 +24,7 @@ public class ExtensionsMenu : IEditorMenu
         string filePath = Win32Utilities.OpenFile(
             "Select extension file",
             "MonkeFrames extension (*.mfextension)\0*.mfextension\0All Files\0*.*",
-            SystemUtilities.GetFolder(System.Environment.SpecialFolder.UserProfile));
+            Cardboard.CardboardSystem.GetFolderPath(System.Environment.SpecialFolder.UserProfile));
 
         if (string.IsNullOrEmpty(filePath))
             return;

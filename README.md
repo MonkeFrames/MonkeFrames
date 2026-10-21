@@ -13,6 +13,8 @@ For more information, visit https://monkeframes.com.
 1. Download `MonkeFrames.zip` from the [releases](https://github.com/MonkeFrames/MonkeFrames/releases/latest) page
 2. Extract the zip file into your game folder and run the game
 
+MonkeFrames requires [Cardboard 1.3.0 or newer](https://cardboard.sirkingbinx.dev/), included in the build output. Keep one installed copy of Cardboard in BepInEx/plugins. Spectator camera sharing now uses Cardboard channels, so both players must use this version of MonkeFrames; older custom-event builds cannot exchange camera positions with it.
+
 ## Usage
 Press `V` to create a new keyframe. You can press `T` to create a new keyframe looking at the monke, `X` to replace the current keyframe with a new one, or press `Del` to delete the selected keyframe.
 
@@ -26,7 +28,7 @@ Once you are done making your animation, you can export it for usage in a video 
 
 ## For Developers
 ### Issue Trackers
-All issue tracking (including bug reporting, feature requests, or any other MonkeFrames inquiries) happens on the [Discord](https://monkeframes.sirkingbinx.dev). Use the `#issues` forum channel and select any tags that apply.
+All issue tracking (including bug reporting, feature requests, or any other MonkeFrames inquiries) happens on the [Discord](https://monkeframes.com). Use the `#issues` forum channel and select any tags that apply.
 
 ### Contribution
 - **MonkeFrames.Editor** is freely avaliable for pull requests, however we recommend developing your idea using extensions instead.

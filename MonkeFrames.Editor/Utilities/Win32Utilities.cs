@@ -56,7 +56,7 @@ public class Win32Utilities
             string chosenFilePath = ofn.file;
 
             File.WriteAllText(chosenFilePath, content);
-            Console.WriteLine($"Wrote to {chosenFilePath}");
+            MonkeFrames.Extensions.FramesLog.Log($"Wrote to {chosenFilePath}");
         }
     }
 

@@ -61,12 +61,12 @@ public class KeyframeManager : MonoBehaviour
     public void Start()
     {
         Instance = this;
-        Console.WriteLine("[MonkeFrames::KeyframeManager] creating new project \"new project\"");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::KeyframeManager] creating new project \"new project\"");
 
         Project = new Project("new project", Constants.Exporter);
         Project.FPS = 60;
 
-        Console.WriteLine("[MonkeFrames::KeyframeManager] Keyframe manager is running");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::KeyframeManager] Keyframe manager is running");
     }
 
     public void Update()

@@ -142,7 +142,7 @@ public class IEditorMenuManager
                 }
                 catch (System.Exception ex)
                 {
-                    System.Console.WriteLine($"[MonkeFrames::Menu] \"{item.Name}\" failed: {ex.InnerException?.Message ?? ex.Message}");
+                    MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Menu] \"{item.Name}\" failed: {ex.InnerException?.Message ?? ex.Message}");
                 }
 
                 clicked = true;

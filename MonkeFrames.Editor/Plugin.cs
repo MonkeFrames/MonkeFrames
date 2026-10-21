@@ -1,3 +1,4 @@
+using Cardboard;
 using BepInEx;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
@@ -7,18 +8,26 @@ using MonkeFrames.Extensions;
 
 namespace MonkeFrames.Editor;
 
+[BepInDependency("dev.sirkingbinx.cardboard", "1.3.0")]
 [BepInPlugin(Constants.Guid, Constants.Name, Constants.Version)]
 public class Plugin : BaseUnityPlugin
 {
-    public void Start()
+    public void Awake()
     {
-        HarmonyLib.Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, Constants.Guid);
-        GorillaTagger.OnPlayerSpawned(OnPlayerSpawned);
+        CardboardHarmony.PatchInstance(this);
+        CardboardEvents.OnPlayerSpawned += OnPlayerSpawned;
+    }
+
+    private void OnDestroy()
+    {
+        CardboardEvents.OnPlayerSpawned -= OnPlayerSpawned;
+        Application.quitting -= OnMonkeFramesUnloaded;
+        CardboardHarmony.UnpatchInstance();
     }
 
     public static void OnPlayerSpawned()
     {
-        Console.WriteLine("[MonkeFrames::Initialize] Initializing MonkeFrames...");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Initialize] Initializing MonkeFrames...");
 
         Constants.Init();
 
@@ -35,14 +44,14 @@ public class Plugin : BaseUnityPlugin
         tpc.AddComponent<Replays.ReplayManager>();
         tpc.AddComponent<Mocap.MocapManager>();
 
-        Console.WriteLine("[MonkeFrames::Initialize] All components added");
+        MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Initialize] All components added");
 
         Application.quitting += OnMonkeFramesUnloaded;
     }
 
     public static Action OnMonkeFramesLoaded = () =>
     {
-        Console.WriteLine($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
+        MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Initialize] Welcome to MonkeFrames version {Constants.VersionID}");
 
         Settings.Load();
 
@@ -56,13 +65,13 @@ public class Plugin : BaseUnityPlugin
                 !string.Equals(System.IO.Path.GetDirectoryName(compilerPath), editorDir, StringComparison.OrdinalIgnoreCase))
             {
                 string msg = $"Warning: MonkeFrames.Compiler.dll is being loaded from \"{compilerPath}\" instead of the plugin folder. Remove that copy and restart the game.";
-                Console.WriteLine("[MonkeFrames::Initialize] " + msg);
+                MonkeFrames.Extensions.FramesLog.Log("[MonkeFrames::Initialize] " + msg);
                 UIManager.Instance.Status = msg;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Initialize] Could not verify compiler location: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Initialize] Could not verify compiler location: {ex.Message}");
         }
 
         CameraManager.Instance.SetModEnabled(true);

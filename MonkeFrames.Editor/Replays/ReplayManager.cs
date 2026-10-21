@@ -20,7 +20,7 @@ public class ReplayManager : MonoBehaviour
 {
     public static ReplayManager Instance;
 
-    public static string Folder => SystemUtilities.Combine(Constants.DataFolder, "replays");
+    public static string Folder => System.IO.Path.Combine(Constants.DataFolder, "replays");
     public const string Extension = ".mfreplay";
 
     // ---------------- Settings ----------------
@@ -284,7 +284,7 @@ public class ReplayManager : MonoBehaviour
             if (b.Closed || UnityEngine.Time.unscaledTime < b.NextCosmeticCheck) continue;
             b.NextCosmeticCheck = UnityEngine.Time.unscaledTime + 2f;
             try { PuppetBuilder.AddNewRenderers(b.Track, b.Rig); }
-            catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Replay] Cosmetic update failed: {ex.Message}"); }
+            catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Cosmetic update failed: {ex.Message}"); }
         }
 
         DrainAudio();
@@ -354,7 +354,7 @@ public class ReplayManager : MonoBehaviour
         catch (Exception ex)
         {
             _failedRigs.Add(rig);
-            Console.WriteLine($"[MonkeFrames::Replay] Couldn't record {CameraModes.PlayerName(rig)}: {ex}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Couldn't record {CameraModes.PlayerName(rig)}: {ex}");
         }
     }
 
@@ -515,7 +515,7 @@ public class ReplayManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Replay] Couldn't open the microphone: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Couldn't open the microphone: {ex.Message}");
             _mic = null;
             _ownMic = false;
         }
@@ -554,7 +554,7 @@ public class ReplayManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Replay] Mic lookup failed: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Mic lookup failed: {ex.Message}");
         }
         return false;
     }
@@ -833,7 +833,7 @@ public class ReplayManager : MonoBehaviour
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MonkeFrames::Replay] Save failed: {ex}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Save failed: {ex}");
                 _pendingStatus = "Couldn't save the replay: " + ex.Message;
                 clip.Dirty = true;
                 clip.FilePath = old;
@@ -877,7 +877,7 @@ public class ReplayManager : MonoBehaviour
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[MonkeFrames::Replay] Load failed: {ex}");
+                MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Load failed: {ex}");
                 _pendingStatus = "Couldn't load that replay: " + ex.Message;
                 _busy = false;
             }
@@ -947,13 +947,13 @@ public class ReplayManager : MonoBehaviour
             foreach (string f in Directory.GetFiles(Folder, "*" + Extension))
             {
                 try { Library.Add(ReplayClip.Load(f, headerOnly: true)); }
-                catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Replay] Skipping {f}: {ex.Message}"); }
+                catch (Exception ex) { MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Skipping {f}: {ex.Message}"); }
             }
             Library.Sort((a, b) => b.Created.CompareTo(a.Created));
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[MonkeFrames::Replay] Library scan failed: {ex.Message}");
+            MonkeFrames.Extensions.FramesLog.Log($"[MonkeFrames::Replay] Library scan failed: {ex.Message}");
         }
     }
 
