@@ -19,6 +19,94 @@ public class KeyframeManager : MonoBehaviour
 
     public Dictionary<Keyframe, GameObject> Objects = new Dictionary<Keyframe, GameObject>();
 
+    private readonly KeyframeHistory history = new();
+    private Project historyProject;
+    private Replays.ReplayClip historyClip;
+    private int historyRevision;
+    private string editGroup;
+    private Keyframe? clipboard;
+    public bool CanEdit => Project != null && !IsCompiling && CameraManager.Instance != null
+        && !CameraManager.Instance.InPlayback && !CameraManager.Instance.Exporting;
+
+    private void CheckHistoryContext()
+    {
+        var rm = Replays.ReplayManager.Instance;
+        var clip = rm != null && rm.Viewing ? rm.Clip : null;
+        if (ReferenceEquals(historyProject, Project) && ReferenceEquals(historyClip, clip)) return;
+        history.Clear(); editGroup = null;
+        historyProject = Project; historyClip = clip;
+    }
+    private KeyframeHistory.State CaptureState() => new(Project.Keyframes, UIManager.Instance.Selection, historyClip?.InPoint);
+    public void RecordUndo()
+    {
+        CheckHistoryContext(); history.Record(CaptureState());
+        historyRevision++; editGroup = null;
+        Project.IsCompiled = false;
+    }
+    internal KeyframeHistory.State BeginPropertyEdit()
+    {
+        if (!CanEdit || Event.current.type is EventType.Layout or EventType.Repaint or EventType.Used) return null;
+        CheckHistoryContext();
+        var state = CaptureState(); state.Revision = historyRevision; return state;
+    }
+    internal void EndPropertyEdit(KeyframeHistory.State before, string group)
+    {
+        if (before == null || before.Revision != historyRevision || before.Matches(Project.Keyframes, historyClip?.InPoint)) return;
+        string gesture = $"{group}:{GUIUtility.hotControl}:{GUIUtility.keyboardControl}";
+        if (editGroup != gesture || (GUIUtility.hotControl == 0 && GUIUtility.keyboardControl == 0))
+        { history.Record(before); historyRevision++; }
+        editGroup = gesture;
+        Project.IsCompiled = false;
+        if (historyClip != null) historyClip.Dirty = true;
+    }
+    public void Undo() => RestoreHistory(false);
+    public void Redo() => RestoreHistory(true);
+    private void RestoreHistory(bool redo)
+    {
+        if (!CanEdit) return;
+        CheckHistoryContext();
+        var state = redo ? history.Redo(CaptureState()) : history.Undo(CaptureState());
+        if (state == null) return;
+        historyRevision++; editGroup = null;
+        Project.Keyframes = new List<Keyframe>(state.Keys);
+        Project.IsCompiled = false;
+        UIManager.Instance.Selection = Mathf.Clamp(state.Selection, -1, Project.Keyframes.Count - 1);
+        if (historyClip != null && state.ReplayInPoint.HasValue)
+        { historyClip.InPoint = state.ReplayInPoint.Value; historyClip.Dirty = true; }
+        RefreshOrbs();
+        UIManager.Instance.Status = redo ? "Redid keyframe edit." : "Undid keyframe edit.";
+    }
+    private bool ValidSelection => Project != null && UIManager.Instance.Selection >= 0
+        && UIManager.Instance.Selection < Project.Keyframes.Count;
+    public void CopySelection()
+    {
+        if (!ValidSelection) return;
+        clipboard = Project.Keyframes[UIManager.Instance.Selection];
+        UIManager.Instance.Status = "Copied keyframe.";
+    }
+    public void CutSelection()
+    {
+        if (!CanEdit || !ValidSelection) return;
+        CopySelection();
+        var studio = Replays.ReplayStudio.Instance;
+        if (studio != null && studio.Active) studio.DeleteKeyframe(UIManager.Instance.Selection);
+        else DeleteKeyframe(UIManager.Instance.Selection);
+    }
+    public void Paste()
+    {
+        if (!CanEdit || !clipboard.HasValue) return;
+        var keyframe = clipboard.Value;
+        keyframe.GUID = Guid.NewGuid().ToString(); keyframe.Compiled = false;
+        var studio = Replays.ReplayStudio.Instance;
+        if (studio != null && studio.Active) { studio.InsertPastedKeyframe(keyframe); return; }
+        RecordUndo();
+        int index = ValidSelection ? UIManager.Instance.Selection + 1 : Project.Keyframes.Count;
+        Project.Keyframes.Insert(index, keyframe);
+        UIManager.Instance.Selection = index;
+        RefreshOrbs();
+        UIManager.Instance.Status = "Pasted keyframe.";
+    }
+
     public KeyframeManager()
     {
         Instance = this;
@@ -71,8 +159,9 @@ public class KeyframeManager : MonoBehaviour
 
     public void Update()
     {
-        if (CameraManager.Instance.InPlayback)
-            return;
+        if (!CanEdit || Keyboard.current == null) return;
+        // Ctrl+X/V are clipboard actions, never the unmodified replace/add shortcuts.
+        if (Keyboard.current.ctrlKey.isPressed || Keyboard.current.leftMetaKey.isPressed || Keyboard.current.rightMetaKey.isPressed) return;
 
         // Don't treat typing in a text field (keyframe values, room codes...) as shortcuts.
         if (GUIUtility.keyboardControl != 0)
@@ -163,6 +252,9 @@ public class KeyframeManager : MonoBehaviour
 
     private Keyframe CreateKeyframeCore(int replaceKeyframeIdx, bool lookAtPlayer)
     {
+        if (!CanEdit) return default;
+        if (replaceKeyframeIdx < -1 || replaceKeyframeIdx >= Project.Keyframes.Count) return default;
+        RecordUndo();
         Keyframe k = new Keyframe();
 
         k.Position = CameraManager.Instance.Position;
@@ -212,6 +304,8 @@ public class KeyframeManager : MonoBehaviour
         if (Project == null || index < 0 || index >= Project.Keyframes.Count)
             return;
 
+        if (!CanEdit) return;
+        RecordUndo();
         Keyframe keyframe = Project.Keyframes[index];
         if (Objects.TryGetValue(keyframe, out GameObject orb))
             orb.Destroy();

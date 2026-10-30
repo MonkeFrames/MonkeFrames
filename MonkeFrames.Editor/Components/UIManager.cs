@@ -52,6 +52,16 @@ public class UIManager : MonoBehaviour
     public int FocusedWindow = -1;
 
     public bool Drawing;
+    public bool HiddenByUser { get; private set; }
+    public bool Visible => Drawing && !HiddenByUser;
+
+    public void ToggleUI()
+    {
+        HiddenByUser = !HiddenByUser;
+        CurrentMenuIndex = -1;
+        _dropdownRect = default;
+        GUIUtility.keyboardControl = 0;
+    }
 
     private IEditorMenuManager _dropdownMenu;
     private float _dropdownProgress;
@@ -146,7 +156,7 @@ public class UIManager : MonoBehaviour
     {
         get
         {
-            if (!Drawing || UnityEngine.InputSystem.Mouse.current == null)
+            if (!Visible || UnityEngine.InputSystem.Mouse.current == null)
                 return false;
 
             Vector2 p = UnityEngine.InputSystem.Mouse.current.position.ReadValue();
@@ -219,6 +229,9 @@ public class UIManager : MonoBehaviour
         if (!Drawing)
             return;
 
+        HandleControlShortcuts(); // Ctrl+H must also restore a hidden menu bar.
+        if (HiddenByUser) return;
+
         GUISkin prevSkin = GUI.skin;
         GUI.skin = Theme.Skin;
         GUI.backgroundColor = Color.white;
@@ -241,8 +254,6 @@ public class UIManager : MonoBehaviour
             GUI.skin = prevSkin;
             return;
         }
-
-        HandleControlShortcuts();
 
         CloseMenuOnOutsideClick();
         DrawMenuBar();

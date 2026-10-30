@@ -2,6 +2,8 @@ using BepInEx;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Components;
 using System;
+using System.Collections;
+using GorillaTagScripts.Subscription.AlarmClocks;
 using UnityEngine;
 using MonkeFrames.Extensions;
 
@@ -10,13 +12,37 @@ namespace MonkeFrames.Editor;
 [BepInPlugin(Constants.Guid, Constants.Name, Constants.Version)]
 public class Plugin : BaseUnityPlugin
 {
+    private static Plugin instance;
+    private bool initializing, initialized;
+
     public void Start()
     {
+        instance = this;
         HarmonyLib.Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, Constants.Guid);
         GorillaTagger.OnPlayerSpawned(OnPlayerSpawned);
     }
 
     public static void OnPlayerSpawned()
+    {
+        if (instance == null || instance.initializing || instance.initialized) return;
+        instance.initializing = true;
+        instance.StartCoroutine(instance.InitializeAfterWakeUp());
+    }
+
+    private IEnumerator InitializeAfterWakeUp()
+    {
+        // The spawn callback can precede the alarm's input/teleport sequence. Do not
+        // activate/reconfigure its camera until the game has finished waking the player.
+        yield return null;
+        while (GorillaTagger.Instance == null || GorillaTagger.Instance.offlineVRRig == null
+            || (AlarmClockManager.Instance != null && !AlarmClockManager.Instance.Initialized)
+            || (AlarmClockManager.Instance == null && !string.IsNullOrEmpty(PlayerPrefs.GetString("AlarmClock"))))
+            yield return null;
+        try { InitializeEditor(); initialized = true; }
+        finally { initializing = false; }
+    }
+
+    private static void InitializeEditor()
     {
         Console.WriteLine("[MonkeFrames::Initialize] Initializing MonkeFrames...");
 

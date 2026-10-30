@@ -7,7 +7,7 @@ namespace MonkeFrames.Compiler.Models;
 /// <summary>
 /// Represents many properties of a point on the animation, such as positional, rotational, and transitional data.
 /// </summary>
-public struct Keyframe
+public struct Keyframe : IEquatable<Keyframe>
 {
     /// <summary>
     /// The position of the keyframe.
@@ -88,11 +88,11 @@ public struct Keyframe
         if (obj is not Keyframe other)
             return false;
 
-        if (ReferenceEquals(this, other))
-            return true;
-
-        return this.GUID == other.GUID;
+        return Equals(other);
     }
+
+    /// <summary>Compare the stable identity rather than editable properties.</summary>
+    public readonly bool Equals(Keyframe other) => GUID == other.GUID;
     
     /// <summary>
     /// Returns the hash code for this instance.
@@ -100,7 +100,7 @@ public struct Keyframe
     /// <returns>A 32-bit signed integer that is the hash code of this instance.</returns>
     public override readonly int GetHashCode()
     {
-        return base.GetHashCode();
+        return GUID?.GetHashCode() ?? 0;
     }
 
     /// <summary>

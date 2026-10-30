@@ -36,6 +36,7 @@ public enum CameraMode
 public class CameraModes : MonoBehaviour
 {
     public static CameraModes Instance;
+    private FirstPersonHeadHider firstPersonHead;
 
     // ---- Current selection ----
     public CameraMode Mode { get; private set; } = CameraMode.Free;
@@ -142,7 +143,11 @@ public class CameraModes : MonoBehaviour
     }
 
     private void OnEnable() => Application.onBeforeRender += OnBeforeRender;
-    private void OnDisable() => Application.onBeforeRender -= OnBeforeRender;
+    private void OnDisable()
+    {
+        Application.onBeforeRender -= OnBeforeRender;
+        firstPersonHead?.Configure(CameraManager.Instance != null ? CameraManager.Instance.Camera : null, null);
+    }
 
     private void OnBeforeRender()
     {
@@ -408,8 +413,8 @@ public class CameraModes : MonoBehaviour
     public static string PlayerName(VRRig rig)
     {
         if (rig == null) return "nobody";
-        if (rig.isOfflineVRRig) return "You";
-
+        string displayed = rig.playerText1 != null ? rig.playerText1.text : null;
+        if (!string.IsNullOrWhiteSpace(displayed)) return displayed;
         string name = null;
         try { name = rig.Creator?.SanitizedNickName; } catch { }
         if (string.IsNullOrEmpty(name)) name = rig.playerNameVisible;
@@ -429,7 +434,10 @@ public class CameraModes : MonoBehaviour
         CameraManager cam = CameraManager.Instance;
         _active = cam != null && Mode != CameraMode.Free && !cam.CinemachineState && !cam.InPlayback;
         if (!_active)
+        {
+            firstPersonHead?.Configure(cam != null ? cam.Camera : null, null);
             return;
+        }
 
         if (Target == null || !Target.Available)
         {
@@ -438,11 +446,12 @@ public class CameraModes : MonoBehaviour
             if (Target is ReplayPuppet && rm != null && rm.Viewing)
             {
                 _active = false;
+                firstPersonHead?.Configure(cam.Camera, null);
                 return;
             }
 
             Target = DefaultTarget();
-            if (Target == null) { _active = false; return; }
+            if (Target == null) { _active = false; firstPersonHead?.Configure(cam.Camera, null); return; }
             UIManager.Instance.Status = $"That player left, watching {Target.DisplayName} instead.";
         }
 
@@ -506,6 +515,8 @@ public class CameraModes : MonoBehaviour
         Quaternion facing = Quaternion.Euler(0f, _facingYaw, 0f);
 
         CameraMode shot = Mode == CameraMode.Director ? _directorShot : Mode;
+        if (firstPersonHead == null) firstPersonHead = gameObject.AddComponent<FirstPersonHeadHider>();
+        firstPersonHead.Configure(cam.Camera, shot == CameraMode.FirstPerson ? Target.VisualHead : null);
 
         Vector3 pos;
         Quaternion rot;
@@ -514,8 +525,10 @@ public class CameraModes : MonoBehaviour
         {
             case CameraMode.FirstPerson:
             {
-                pos = head + headFwd * ForwardOffset;       // exactly in the head
-                Quaternion want = LevelHorizon ? LookAt(Vector3.zero, headFwd) : headRot;
+                Quaternion eyeRotation = Target.EyeRotation;
+                Vector3 eyeForward = eyeRotation * Vector3.forward;
+                pos = Target.EyePosition + eyeForward * ForwardOffset * Mathf.Abs(Target.Root.lossyScale.x);
+                Quaternion want = LevelHorizon ? LookAt(Vector3.zero, eyeForward) : eyeRotation;
                 _smoothRot = Quaternion.Slerp(_smoothRot, want, k);
                 rot = _smoothRot;
                 _offset = pos - pivot;
