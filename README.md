@@ -1,11 +1,13 @@
 <h1 id="readme">
-  <img src="MonkeFrames.Editor/Resources/MFtitleWhite.png" height=200><br>
+  <img src="/MonkeFrames.Editor/Resources/MFtitleWhite.png" height=200><br>
   <img src="https://img.shields.io/github/downloads/MonkeFrames/MonkeFrames/total"/>
 </h1>
 
-MonkeFrames is a keyframe-based camera animator loosely based on the Orion Drift spectator view that allows you to plan out camera movements with transitions for each property.
+MonkeFrames is a multipurpose tool for Gorilla Tag with a camera animator, replays, motion captures, and many other features that allow you to develop high-quality content easily and efficiently.
 
 Create a keyframe by pressing V. It's properties will show up on the MonkeFrames panel in the top right. You can tweak its transitions, position, and rotation, or replace the currently selected keyframe by pressing X.
+
+For more information, visit https://monkeframes.com.
 
 ## Installations
 1. Download `MonkeFrames.zip` from the [releases](https://github.com/MonkeFrames/MonkeFrames/releases/latest) page
@@ -27,8 +29,9 @@ Once you are done making your animation, you can export it for usage in a video 
 All issue tracking (including bug reporting, feature requests, or any other MonkeFrames inquiries) happens on the [Discord](https://monkeframes.sirkingbinx.dev). Use the `#issues` forum channel and select any tags that apply.
 
 ### Contribution
-- **MonkeFrames.Editor** is freely avaliable for pull requests.
+- **MonkeFrames.Editor** is freely avaliable for pull requests, however we recommend developing your idea using extensions instead.
 - **MonkeFrames.Compiler** is avaliable for pull requests but is much less open to change. We accept optimization tweaks, code cleanup, but not much in terms of functionality change.
+- **MonkeFrames.Extensions**: is freely avaliable for pull requests, assuming that your code is high quality and acceptable for production use.
 
 ### Embed MonkeFrames into your project
 You can embed the keyframe functionality of MonkeFrames into your own projects. See [MonkeFrames.Compiler](/MonkeFrames.Compiler).

@@ -20,7 +20,7 @@ public sealed class AudioBlock
 public sealed class ReplayClip
 {
     public const int Magic = 0x5052464D; // "MFRP"
-    public const int FileVersion = 3;   // 2: spectator cameras, 3: recorded cosmetic IDs
+    public const int FileVersion = 4;   // 4: fur appearance and anatomical eye pose
 
     public string Name = "Replay";
     public DateTime Created = DateTime.Now;
@@ -161,6 +161,10 @@ public sealed class ReplayTrack
     /// <summary>Visible meshes at the time of recording (used to rebuild the gorilla after loading).</summary>
     public string[] RendererPaths = Array.Empty<string>();
     public string[] CosmeticIds = Array.Empty<string>();
+    public string FurAppearance = "";
+    public bool HasEyePose;
+    public Vector3 EyeLocalPosition;
+    public Quaternion EyeLocalRotation = Quaternion.identity;
     /// <summary>Cosmetic ID for each RendererPaths entry, empty for non-cosmetic renderers.</summary>
     public string[] RendererCosmeticIds = Array.Empty<string>();
     public string HeadPath = "", LeftHandPath = "", RightHandPath = "", MainSkinPath = "";
@@ -379,6 +383,10 @@ public sealed class ReplayTrack
         w.Write(FrameCount);
         WriteStrings(w, CosmeticIds);
         WriteStrings(w, RendererCosmeticIds);
+        w.Write(FurAppearance ?? "");
+        w.Write(HasEyePose);
+        w.Write(EyeLocalPosition.x); w.Write(EyeLocalPosition.y); w.Write(EyeLocalPosition.z);
+        w.Write(EyeLocalRotation.x); w.Write(EyeLocalRotation.y); w.Write(EyeLocalRotation.z); w.Write(EyeLocalRotation.w);
         w.Write(_len);
         w.Write(_data, 0, _len);
 
@@ -424,6 +432,12 @@ public sealed class ReplayTrack
             t.RendererCosmeticIds = ReadStrings(r);
         }
 
+        if (version >= 4)
+        {
+            t.FurAppearance = r.ReadString(); t.HasEyePose = r.ReadBoolean();
+            t.EyeLocalPosition = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+            t.EyeLocalRotation = new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+        }
         t._len = r.ReadInt32();
         if (t._len < 0 || t.FrameCount < 0 || t._len != t.FrameCount * t.FrameSize)
             throw new InvalidDataException($"Replay data for {t.Name} doesn't match its size");

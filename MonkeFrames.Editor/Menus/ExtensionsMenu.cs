@@ -1,8 +1,7 @@
-using GorillaTagScripts;
 using MonkeFrames.Editor.Attributes;
+using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.Utilities;
-using MonkeFrames.Extensions;
 using System.Diagnostics;
 using System.IO;
 
@@ -13,10 +12,10 @@ public class ExtensionsMenu : IEditorMenu
     public string Name => "Extensions";
     public int Index => 8;
 
-    [EditorMenuItem("View Extensions")]
-    public void ViewExtensionsButton()
+    [EditorMenuItem("Extensions Gallery")]
+    public void OpenExtensionsGallery()
     {
-        FramesExtension.ShowMessageBox("Error", "Not implemented", icon: FramesExtension.MessageBoxIcon.Error);
+        UIManager.Instance.OpenWindow("Extension Marketplace");
     }
 
     [EditorMenuItem("Install", Separator = true)]
@@ -31,12 +30,10 @@ public class ExtensionsMenu : IEditorMenu
             return;
 
         string extensionPath = Path.Combine(Constants.DataFolder, "extensions", Path.GetFileName(filePath));
-        File.Copy(filePath, extensionPath);
+        File.Copy(filePath, extensionPath, true);
 
-        FramesExtension.ShowMessageBox(
-            $"[MonkeFrames {Constants.VersionID}] Restart to apply changes",
-            "You must restart MonkeFrames to reload extensions.",
-            icon: FramesExtension.MessageBoxIcon.Information);
+        UIManager.Instance.ReloadExtensions();
+        UIManager.Instance.Status = "Extension installed.";
     }
 
     [EditorMenuItem("Uninstall")]
@@ -52,10 +49,14 @@ public class ExtensionsMenu : IEditorMenu
 
         File.Delete(filePath);
 
-        FramesExtension.ShowMessageBox(
-            $"[MonkeFrames {Constants.VersionID}] Restart to apply changes",
-            "You must restart MonkeFrames to reload extensions.",
-            icon: FramesExtension.MessageBoxIcon.Information);
+        UIManager.Instance.ReloadExtensions();
+        UIManager.Instance.Status = "Extension uninstalled.";
+    }
+
+    [EditorMenuItem("Reload")]
+    public void ReloadButton()
+    {
+        UIManager.Instance.ReloadExtensions();
     }
 
     [EditorMenuItem("Open Extensions Folder", Separator = true)]

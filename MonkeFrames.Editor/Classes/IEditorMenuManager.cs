@@ -32,8 +32,8 @@ public class IEditorMenuManager
         Name = Menu.Name;
         Index = Menu.Index;
 
-        if (Index > LastIndex)
-            LastIndex = Index;
+        if (Menu.Index > LastIndex && Menu.Index != 99)
+            LastIndex = Menu.Index;
 
         List<MethodInfo> menuItemMethods = Menu.GetType()
             .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
@@ -53,9 +53,8 @@ public class IEditorMenuManager
     {
         Menu = null;
         Name = menuName;
-        Index = LastIndex++;
-
         LastIndex++;
+        Index = LastIndex;
 
         foreach (var action in actions)
         {
@@ -68,10 +67,14 @@ public class IEditorMenuManager
 
     public void AddMenuItem(string itemName, Action callback)
     {
-        var item = new EditorMenuItem(itemName);
-        item.Action = callback;
+        AddExtensionMenuItem(itemName, callback);
+    }
 
+    public EditorMenuItem AddExtensionMenuItem(string itemName, Action callback)
+    {
+        var item = new EditorMenuItem(itemName) { Action = callback };
         Items.Add(item);
+        return item;
     }
 
     public float DropdownHeight
@@ -113,7 +116,7 @@ public class IEditorMenuManager
             GUI.color = new Color(1, 1, 1, baseColor.a * e);
 
             bool hover = interactive && row.Contains(Event.current.mousePosition);
-            float h = Anim.To($"menu.{Menu.Name}.{i}", hover ? 1f : 0f, 22f);
+            float h = Anim.To($"menu.{Name}.{i}", hover ? 1f : 0f, 22f);
 
             if (h > 0.01f)
             {

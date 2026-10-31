@@ -94,7 +94,6 @@ public class CameraManager : MonoBehaviour
         if (Camera == null)
             Camera = gameObject.GetComponent<Camera>();
 
-
         // Update values
         if (!Manual)
         {
@@ -157,7 +156,7 @@ public class CameraManager : MonoBehaviour
             UpdateMouseLook();
         }
 
-        if (InPlayback && Keyboard.current.spaceKey.wasPressedThisFrame)
+        if (InPlayback && !Exporting && Keyboard.current.spaceKey.wasPressedThisFrame)
             StopPlayback();
     }
 
@@ -355,7 +354,7 @@ public class CameraManager : MonoBehaviour
         ? (playbackEnding > 0 ? Mathf.Clamp01(playbackPosition / (float)playbackEnding) : 0f)
         : Mathf.Clamp01(Interlocked.CompareExchange(ref ffmpegProgressAmount, 0, 0) / 1000f);
 
-    public string outputMp4 => Path.Combine(Constants.DataFolder, "exports", KeyframeManager.Instance.Project.Name + ".mp4");
+    public string outputMp4 => ExportPaths.Next(Path.Combine(Constants.DataFolder, "exports"), KeyframeManager.Instance.Project.Name);
 
     IEnumerator PlaybackCoroutine()
     {
@@ -374,8 +373,6 @@ public class CameraManager : MonoBehaviour
                 KeyframeManager.Instance.RefreshOrbs();
                 playbackPosition = 0;
                 doRecording = false;
-
-                StopCoroutine("PlaybackCoroutine");
 
                 // Plain playback (Project > Play) has no encoder to shut down.
                 if (!wasRecording)
@@ -396,6 +393,10 @@ public class CameraManager : MonoBehaviour
             }
 
             Keyframe currentFrame = kCache[playbackPosition];
+
+            foreach (FramesExtension extension in ExtensionManager.Plugins.Values)
+                extension.OnKeyframeStep(ref currentFrame);
+
             Blur.Set(currentFrame.MotionBlur, currentFrame.MotionBlurStrength);
 
             Position = currentFrame.Position;
@@ -455,7 +456,12 @@ public class CameraManager : MonoBehaviour
 
     public void StartRecording()
     {
-        if (Exporting) return;
+        if (Exporting || InPlayback) return;
+        if ((KeyframeManager.Instance.Project.CompiledKeyframes?.Count ?? 0) == 0)
+        {
+            UIManager.Instance.Status = "Add keyframes before exporting.";
+            return;
+        }
         renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
         rBuffer = new byte[Screen.width * Screen.height * 4];
         exportFrameCount = KeyframeManager.Instance.Project.CompiledKeyframes.Count;
@@ -469,7 +475,8 @@ public class CameraManager : MonoBehaviour
                 icon: FramesExtension.MessageBoxIcon.Asterisk);
         });
 
-        StartFfmpegEncoder();
+        try { StartFfmpegEncoder(); }
+        catch (Exception ex) { HandleFfmpegFailure(ex); return; }
         doRecording = true;
         StartPlayback();
     }
@@ -478,6 +485,7 @@ public class CameraManager : MonoBehaviour
     {
         var project = KeyframeManager.Instance.Project;
         exportOutputPath = outputMp4;
+        Directory.CreateDirectory(Path.GetDirectoryName(exportOutputPath));
         bool hasVoiceAudio = false;
         ReplayManager replay = ReplayManager.Instance;
         if (replay != null && replay.Viewing && replay.SyncWithKeyframes
@@ -511,7 +519,7 @@ public class CameraManager : MonoBehaviour
                         $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
                         $"-c:a aac -b:a 192k -shortest " +
                         $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-y \"{exportOutputPath}\"";
+                        $"-n \"{exportOutputPath}\"";
         }
         else if (hasVoiceAudio)
         {
@@ -520,7 +528,7 @@ public class CameraManager : MonoBehaviour
                         $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
                         $"-c:a aac -b:a 192k -shortest " +
                         $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-y \"{exportOutputPath}\"";
+                        $"-n \"{exportOutputPath}\"";
         }
         else if (hasMusicAudio)
         {
@@ -529,14 +537,14 @@ public class CameraManager : MonoBehaviour
                         $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
                         $"-c:a aac -b:a 192k -shortest " +
                         $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-y \"{exportOutputPath}\"";
+                        $"-n \"{exportOutputPath}\"";
         }
         else
         {
             arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
                         $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
                         $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-y \"{exportOutputPath}\"";
+                        $"-n \"{exportOutputPath}\"";
         }
 
         Console.WriteLine($"Arguments: {arguments}");
@@ -585,10 +593,11 @@ public class CameraManager : MonoBehaviour
         {
             process.WaitForExit();
             progressTask?.GetAwaiter().GetResult();
+            string error = errorTask?.GetAwaiter().GetResult() ?? "";
             return new ExportResult
             {
-                ExitCode = process.ExitCode,
-                Error = errorTask?.GetAwaiter().GetResult() ?? ""
+                ExitCode = !string.IsNullOrWhiteSpace(error) ? -1 : process.ExitCode,
+                Error = error
             };
         });
     }
@@ -668,6 +677,7 @@ public class CameraManager : MonoBehaviour
 
     public void StartPlayback()
     {
+        if (InPlayback || (!doRecording && Exporting)) return;
         kCache = KeyframeManager.Instance.Project.CompiledKeyframes;
         InPlayback = true;
         UIManager.Instance.Drawing = false;
@@ -681,6 +691,7 @@ public class CameraManager : MonoBehaviour
 
     public void StopPlayback()
     {
+        if (Exporting) return;
         Blur.Set(false, 0f);
         InPlayback = false;
         UIManager.Instance.Drawing = true;

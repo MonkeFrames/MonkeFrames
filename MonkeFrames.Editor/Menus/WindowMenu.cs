@@ -44,4 +44,10 @@ public class WindowMenu : IEditorMenu
     {
         UIManager.Instance.ToggleWindow("Mocap");
     }
+
+    [EditorMenuItem("Extension Marketplace")]
+    public void ExtensionMarketplace()
+    {
+        UIManager.Instance.OpenWindow("Extension Marketplace");
+    }
 }

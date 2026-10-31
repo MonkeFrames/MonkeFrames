@@ -22,68 +22,71 @@ public static class Compiler
     /// <param name="project">The project to build.</param>
     public static async Task Build(Project project)
     {
-        List<Keyframe> compiledKeyframes = [];
-        List<Keyframe> keys = project.Keyframes;
-        int n = keys.Count;
-
-        // Precompute spline data used by "Smooth" transitions.
-        SplineData spline = SplineData.Create(keys, project.Smoothness);
-
-        for (int i = 0; i < n; i++)
+        await Task.Run(() =>
         {
-            Keyframe keyframe = keys[i];
-            int frames = (int)Math.Ceiling(keyframe.Transition.Duration * project.FPS);
-
-            int nextIdx = (i + 1 == n ? i : i + 1);
-            Keyframe next = keys[nextIdx];
-            TransitionEffect effect = keyframe.Transition.Effect;
-
-            for (int j = 0; j < frames; j++)
+            List<Keyframe> compiledKeyframes = [];
+            List<Keyframe> keys = project.Keyframes;
+            int n = keys.Count;
+    
+            // Precompute spline data used by "Smooth" transitions.
+            SplineData spline = SplineData.Create(keys, project.Smoothness);
+    
+            for (int i = 0; i < n; i++)
             {
-                Vector3 newPosition;
-                Quaternion newRotation;
-                float newFOV;
-
-                if (effect == TransitionEffect.Smooth && nextIdx != i)
+                Keyframe keyframe = keys[i];
+                int frames = (int)Math.Ceiling(keyframe.Transition.Duration * project.FPS);
+    
+                int nextIdx = (i + 1 == n ? i : i + 1);
+                Keyframe next = keys[nextIdx];
+                TransitionEffect effect = keyframe.Transition.Effect;
+    
+                for (int j = 0; j < frames; j++)
                 {
-                    float s = (float)j / frames;
-                    if (keyframe.Transition.CustomSpeed)
-                        s = Easing.Bezier(keyframe.Transition.CurveX1, keyframe.Transition.CurveY1,
-                            keyframe.Transition.CurveX2, keyframe.Transition.CurveY2, s);
-                    float d = keyframe.Transition.Duration;
-
-                    newPosition = Transitions.Hermite(spline.Positions[i], spline.PositionTangents[i],
-                        spline.Positions[nextIdx], spline.PositionTangents[nextIdx], d, s);
-
-                    newRotation = Transitions.ToQuaternion(Transitions.Hermite(spline.Rotations[i], spline.RotationTangents[i],
-                        spline.Rotations[nextIdx], spline.RotationTangents[nextIdx], d, s));
-
-                    newFOV = Transitions.Hermite(new Vector4(keyframe.FieldOfView, 0, 0, 0), new Vector4(spline.FovTangents[i], 0, 0, 0),
-                        new Vector4(next.FieldOfView, 0, 0, 0), new Vector4(spline.FovTangents[nextIdx], 0, 0, 0), d, s).x;
+                    Vector3 newPosition;
+                    Quaternion newRotation;
+                    float newFOV;
+    
+                    if (effect == TransitionEffect.Smooth && nextIdx != i)
+                    {
+                        float s = (float)j / frames;
+                        if (keyframe.Transition.CustomSpeed)
+                            s = Easing.Bezier(keyframe.Transition.CurveX1, keyframe.Transition.CurveY1,
+                                keyframe.Transition.CurveX2, keyframe.Transition.CurveY2, s);
+                        float d = keyframe.Transition.Duration;
+    
+                        newPosition = Transitions.Hermite(spline.Positions[i], spline.PositionTangents[i],
+                            spline.Positions[nextIdx], spline.PositionTangents[nextIdx], d, s);
+    
+                        newRotation = Transitions.ToQuaternion(Transitions.Hermite(spline.Rotations[i], spline.RotationTangents[i],
+                            spline.Rotations[nextIdx], spline.RotationTangents[nextIdx], d, s));
+    
+                        newFOV = Transitions.Hermite(new Vector4(keyframe.FieldOfView, 0, 0, 0), new Vector4(spline.FovTangents[i], 0, 0, 0),
+                            new Vector4(next.FieldOfView, 0, 0, 0), new Vector4(spline.FovTangents[nextIdx], 0, 0, 0), d, s).x;
+                    }
+                    else
+                    {
+                        Transition tr = keyframe.Transition;
+                        newPosition = Transitions.Interpolate(tr, keyframe.Position, next.Position, j, frames);
+                        newRotation = Transitions.Interpolate(tr, keyframe.QuatRotation, next.QuatRotation, j, frames);
+                        newFOV = Transitions.Interpolate(tr, keyframe.FieldOfView, next.FieldOfView, j, frames);
+                    }
+    
+                    Keyframe compiledKeyframe = new Keyframe {
+                        Position = newPosition,
+                        Rotation = newRotation.eulerAngles,
+                        FieldOfView = newFOV,
+                        MotionBlur = keyframe.MotionBlur,
+                        MotionBlurStrength = keyframe.MotionBlurStrength,
+                        Compiled = true
+                    };
+    
+                    compiledKeyframes.Add(compiledKeyframe);
                 }
-                else
-                {
-                    Transition tr = keyframe.Transition;
-                    newPosition = Transitions.Interpolate(tr, keyframe.Position, next.Position, j, frames);
-                    newRotation = Transitions.Interpolate(tr, keyframe.QuatRotation, next.QuatRotation, j, frames);
-                    newFOV = Transitions.Interpolate(tr, keyframe.FieldOfView, next.FieldOfView, j, frames);
-                }
-
-                Keyframe compiledKeyframe = new Keyframe {
-                    Position = newPosition,
-                    Rotation = newRotation.eulerAngles,
-                    FieldOfView = newFOV,
-                    MotionBlur = keyframe.MotionBlur,
-                    MotionBlurStrength = keyframe.MotionBlurStrength,
-                    Compiled = true
-                };
-
-                compiledKeyframes.Add(compiledKeyframe);
             }
-        }
-
-        project.CompiledKeyframes = compiledKeyframes;
-        project.IsCompiled = true;
+    
+            project.CompiledKeyframes = compiledKeyframes;
+            project.IsCompiled = true;
+        });
     }
 
     /// <summary>

@@ -185,6 +185,7 @@ public class KeyframeEditor : IEditorWindow
 
     private void DrawProperties(Rect panel, int selection, float slide)
     {
+        var before = KeyframeManager.Instance.BeginPropertyEdit();
         Keyframe k = Project.Keyframes[selection];
 
         float x = panel.x + 14;
@@ -325,6 +326,7 @@ public class KeyframeEditor : IEditorWindow
         }
 
         Project.Keyframes[selection] = k;
+        KeyframeManager.Instance.EndPropertyEdit(before, $"keyframe:{k.GUID}");
     }
 
     /// <summary>Draws the easing curve with a dot that travels along it on a loop.</summary>

@@ -39,6 +39,7 @@ public class ReplayManager : MonoBehaviour
 
     // ---------------- State ----------------
     public ReplayClip Clip { get; private set; }
+    private ReplayClip loadingClip;
     public bool Recording { get; private set; }
     public bool Viewing { get; private set; }
     public bool Playing;
@@ -891,6 +892,7 @@ public class ReplayManager : MonoBehaviour
 
     private System.Collections.IEnumerator FinishLoadRoutine(ReplayClip clip)
     {
+        loadingClip = clip;
         bool loaded = false;
         try
         {
@@ -903,6 +905,7 @@ public class ReplayManager : MonoBehaviour
                 ReplayPuppet puppet = PuppetBuilder.BuildFromSaved(t, model);
                 if (model != null)
                     yield return StartCoroutine(PuppetBuilder.LoadCosmetics(t, puppet, model));
+                ReplayFur.Apply(t, puppet);
             }
 
             Clip = clip;
@@ -917,6 +920,7 @@ public class ReplayManager : MonoBehaviour
             if (!loaded && Clip != clip)
                 foreach (ReplayTrack t in clip.Tracks)
                     DestroyTrackObjects(t);
+            if (ReferenceEquals(loadingClip, clip)) loadingClip = null;
             _busy = false;
         }
     }
@@ -1039,6 +1043,15 @@ public class ReplayManager : MonoBehaviour
     {
         RestoreLive();
         RestoreListener();
+        if (loadingClip != null && !ReferenceEquals(loadingClip, Clip))
+            foreach (var track in loadingClip.Tracks) DestroyTrackObjects(track);
+        if (Clip != null)
+        {
+            foreach (var track in Clip.Tracks) DestroyTrackObjects(track);
+            foreach (var camera in Clip.Cameras)
+                if (camera.Model != null) Destroy(camera.Model);
+        }
+        loadingClip = null;
     }
 
     // =====================================================================

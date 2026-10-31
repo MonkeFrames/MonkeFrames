@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
-using UnityEngine.AddressableAssets;
 using GorillaNetworking;
 using GorillaTag.CosmeticSystem;
 using MonkeFrames.Editor.Components;
@@ -19,9 +18,15 @@ public class ReplayPuppet : CamSubject
     public ReplayTrack Track;
     public Transform[] Parts = System.Array.Empty<Transform>();
     public Transform HeadNode, LeftHandNode, RightHandNode;
+    internal TextMeshPro NameTag;
+    private void LateUpdate()
+    {
+        if (NameTag != null && NameTag.text != DisplayName) NameTag.text = DisplayName;
+    }
 
     internal readonly List<UnityEngine.Object> Owned = new();   // copied materials / meshes to clean up
     internal readonly List<GameObject> AddressableCosmetics = new();
+    internal readonly Dictionary<object, ReplayCosmeticCache.Lease> CosmeticLeases = new();
     internal PuppetBuilder.Ctx BuildCtx;            // lets us add cosmetics that load after recording starts
 
     public override string DisplayName => Track?.Name ?? "Gorilla";
@@ -29,6 +34,8 @@ public class ReplayPuppet : CamSubject
     public override bool IsReplay => true;
     public override bool Available => this != null && gameObject.activeInHierarchy;
     public override Transform Head => HeadNode != null ? HeadNode : transform;
+    public override Vector3 EyePosition => Head.TransformPoint(Track.EyeLocalPosition);
+    public override Quaternion EyeRotation => Head.rotation * Track.EyeLocalRotation;
     public override Transform Hand(bool right)
     {
         Transform t = right ? RightHandNode : LeftHandNode;
@@ -39,8 +46,10 @@ public class ReplayPuppet : CamSubject
     public void ReleaseOwned()
     {
         foreach (GameObject instance in AddressableCosmetics)
-            if (instance != null) Addressables.ReleaseInstance(instance);
+            if (instance != null) { instance.SetActive(false); Destroy(instance); }
         AddressableCosmetics.Clear();
+        foreach (var lease in CosmeticLeases.Values) lease.Dispose();
+        CosmeticLeases.Clear();
         foreach (UnityEngine.Object o in Owned)
             if (o != null)
                 Destroy(o);
@@ -180,6 +189,10 @@ public static class PuppetBuilder
         HashSet<Renderer> worn = WornRenderers(rig);
         foreach (Renderer r in src.GetComponentsInChildren<Renderer>(false))
         {
+            // The name is copied from VRRig.playerText1 below, rather than baking its
+            // current generated TMP mesh into the replay.
+            if (rig.playerText1 != null && r.gameObject == rig.playerText1.gameObject)
+                continue;
             if (!Include(r, worn))
                 continue;
 
@@ -202,8 +215,10 @@ public static class PuppetBuilder
             }
         }
 
-        Transform head = rig.head != null && rig.head.rigTarget != null ? rig.head.rigTarget
-            : rig.headMesh != null ? rig.headMesh.transform : null;
+        Transform head = ReplayRigBones.Head(rig);
+        track.FurAppearance = ReplayFur.Capture(rig);
+        ReplayRigBones.EyeOffset(out track.EyeLocalPosition, out track.EyeLocalRotation);
+        track.HasEyePose = true;
         Transform lh = rig.leftHand != null ? rig.leftHand.rigTarget : null;
         Transform rh = rig.rightHand != null ? rig.rightHand.rigTarget : null;
         if (head != null) AddMoving(head);
@@ -246,7 +261,10 @@ public static class PuppetBuilder
         track.Paths = paths.ToArray();
         liveParts = live.ToArray();
 
-        return Finish(ctx, track);
+        ReplayPuppet puppet = Finish(ctx, track);
+        CreateNameTag(ctx, rig);
+        ReplayFur.Apply(track, puppet);
+        return puppet;
     }
 
     /// <summary>
@@ -341,8 +359,6 @@ public static class PuppetBuilder
     private static IEnumerable<CosmeticPart> CosmeticParts(CosmeticInfoV2 info)
     {
         if (info.holdableParts != null) foreach (var part in info.holdableParts) yield return part;
-        if (info.wardrobeParts != null) foreach (var part in info.wardrobeParts) yield return part;
-        if (info.storeParts != null) foreach (var part in info.storeParts) yield return part;
         if (info.functionalParts != null) foreach (var part in info.functionalParts) yield return part;
     }
 
@@ -351,9 +367,28 @@ public static class PuppetBuilder
     {
         if (track?.CosmeticIds == null || puppet == null || rig == null)
             yield break;
+
+        // Yall know you gotta load the cosmetics before using them right
+        // -skb
+        CosmeticsController controller = CosmeticsController.instance;
+        if (controller != null && !controller.v2_allCosmeticsInfoAssetRef_isLoaded)
+        {
+            IEnumerator loadCatalog = null;
+            try
+            {
+                loadCatalog = controller.V2_allCosmeticsInfoAssetRefSO_LoadCoroutine();
+            }
+            catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [1]: {ex.Message}"); }
+
+            if (loadCatalog != null)
+                yield return controller.StartCoroutine(loadCatalog);
+            if (!controller.v2_allCosmeticsInfoAssetRef_isLoaded)
+                throw new InvalidOperationException("The game cosmetic catalog did not finish loading.");
+        }
+
         if (!GTHardCodedBones.TryGetBoneXforms(rig, out Transform[] sourceBones, out string error))
         {
-            if (!string.IsNullOrEmpty(error)) System.Console.WriteLine($"[MonkeFrames::Replay] Could not resolve cosmetic anchors: {error}");
+            if (!string.IsNullOrEmpty(error)) Console.WriteLine($"[MonkeFrames::Replay] Could not load cosmetics in replay [2]: {error}");
             yield break;
         }
 
@@ -364,45 +399,66 @@ public static class PuppetBuilder
             bool loadedAnyPart = false;
             foreach (CosmeticPart part in CosmeticParts(info))
             {
-                if (part.prefabAssetRef == null || part.attachAnchors == null) continue;
+                if (part.prefabAssetRef == null || !part.prefabAssetRef.RuntimeKeyIsValid()) continue;
+                object key = part.prefabAssetRef.RuntimeKey;
+                if (!puppet.CosmeticLeases.TryGetValue(key, out var lease))
+                {
+                    lease = ReplayCosmeticCache.Acquire(key);
+                    puppet.CosmeticLeases.Add(key, lease);
+                }
+                var operation = lease.Handle;
+                while (!operation.IsDone) yield return null;
+                if (puppet == null) yield break; // the puppet owns and releases the lease
+                if (operation.Status != UnityEngine.ResourceManagement.AsyncOperations.AsyncOperationStatus.Succeeded
+                    || operation.Result == null)
+                {
+                    Console.WriteLine($"[MonkeFrames::Replay] Cosmetic asset failed to load: {info.displayName}");
+                    puppet.CosmeticLeases.Remove(key); lease.Dispose();
+                    continue;
+                }
+                // Loading the prefab also loads its material/texture dependencies, even
+                // for fur parts which contain no attachable renderer.
+                if (part.attachAnchors == null) continue;
                 foreach (CosmeticAttachInfo attach in part.attachAnchors)
                 {
                     int boneIndex = GTHardCodedBones.GetBoneIndex(attach.parentBone);
                     if (boneIndex < 0 || boneIndex >= sourceBones.Length || sourceBones[boneIndex] == null) continue;
-
                     string bonePath = PathOf(sourceBones[boneIndex], rig.transform);
                     if (string.IsNullOrEmpty(bonePath)) continue;
                     Transform parent = Node(puppet.BuildCtx, bonePath);
-                    var operation = part.prefabAssetRef.InstantiateAsync(parent, true);
-                    while (!operation.IsDone) yield return null;
-                    GameObject instance = operation.Result;
-                    if (instance == null)
-                    {
-                        System.Console.WriteLine($"[MonkeFrames::Replay] Cosmetic prefab failed to load: {info.displayName}");
-                        continue;
-                    }
-
-                    instance.transform.SetParent(parent, false);
-                    instance.transform.localPosition = attach.offset.pos;
-                    instance.transform.localRotation = attach.offset.rot;
+                    var holder = new GameObject("Replay Cosmetic " + info.displayName);
+                    holder.SetActive(false);
+                    holder.transform.SetParent(parent, false);
+                    puppet.AddressableCosmetics.Add(holder);
+                    var context = holder.AddComponent<ReplayCosmeticContext>();
+                    context.Template = rig; context.Puppet = puppet;
+                    // The holder already carries replay context when any cloned script
+                    // first gets Awake/OnEnable. It remains inactive during setup.
+                    GameObject instance = UnityEngine.Object.Instantiate(operation.Result, holder.transform, false);
+                    instance.transform.SetLocalPositionAndRotation(attach.offset.pos, attach.offset.rot);
                     instance.transform.localScale = attach.offset.scale;
-                    puppet.AddressableCosmetics.Add(instance);
-                    loadedAnyPart = true;
-
-                    // Disable physical collisions & interactions on cosmetic instances
+                    foreach (TransferrableObject item in instance.GetComponentsInChildren<TransferrableObject>(true))
+                    {
+                        try { context.Initialize(item); item.OnSpawn(rig); }
+                        catch (Exception ex)
+                        {
+                            item.enabled = false;
+                            Console.WriteLine($"[MonkeFrames::Replay] {item.GetType().Name} initialization failed: {ex}");
+                        }
+                    }
                     foreach (Collider col in instance.GetComponentsInChildren<Collider>(true)) col.enabled = false;
-                    foreach (Rigidbody rb in instance.GetComponentsInChildren<Rigidbody>(true)) rb.isKinematic = true;
-
-                    // Rebind any SkinnedMeshRenderers (clothing, shirts, badges) to puppet bones
+                    foreach (Rigidbody rb in instance.GetComponentsInChildren<Rigidbody>(true))
+                    { rb.isKinematic = true; rb.detectCollisions = false; }
                     RebindSkinnedMeshes(puppet.BuildCtx, instance);
+                    holder.SetActive(true);
+                    loadedAnyPart = true;
                 }
             }
+
             if (loadedAnyPart && !string.IsNullOrEmpty(info.displayName))
                 loadedCosmeticIds.Add(info.displayName);
         }
 
-        // Fallback for non-Addressable cosmetics or cosmetics without asset refs:
-        // Copy their saved renderer paths from available rigs in the scene
         if (track.RendererPaths != null && track.RendererCosmeticIds != null && puppet.BuildCtx != null)
         {
             for (int i = 0; i < track.RendererPaths.Length; i++)
@@ -411,15 +467,24 @@ public static class PuppetBuilder
                 if (string.IsNullOrEmpty(cosmeticId) || loadedCosmeticIds.Contains(cosmeticId)) continue;
 
                 string path = track.RendererPaths[i];
-                if (puppet.BuildCtx.Nodes.ContainsKey(path)) continue;
+                if (puppet.BuildCtx.Nodes.TryGetValue(path, out var existing) && existing.GetComponent<Renderer>() != null) continue;
 
                 foreach (Transform source in puppet.BuildCtx.Sources)
                 {
                     Transform t = Find(source, path);
-                    if (t == null) continue;
+
+                    if (t == null)
+                        continue;
+
                     Renderer r = t.GetComponent<SkinnedMeshRenderer>() ?? (Renderer)t.GetComponent<MeshRenderer>();
+
                     if (r == null || r.GetComponent<TMP_Text>() != null) continue;
-                    if (CopyRenderer(puppet.BuildCtx, r, path, source)) break;
+                    var sourceRig = source.GetComponent<VRRig>();
+                    if (sourceRig == null || !CosmeticRendererIds(sourceRig).TryGetValue(r, out string actualId)
+                        || !string.Equals(actualId, cosmeticId, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    if (CopyRenderer(puppet.BuildCtx, r, path, source))
+                        break;
                 }
             }
         }
@@ -435,6 +500,7 @@ public static class PuppetBuilder
             for (int b = 0; b < smr.bones.Length; b++)
             {
                 if (smr.bones[b] == null) continue;
+                remapped[b] = smr.bones[b];
                 string bName = smr.bones[b].name;
                 foreach (var kv in ctx.Nodes)
                 {
@@ -603,7 +669,43 @@ public static class PuppetBuilder
         foreach (string p in track.Paths)
             Node(ctx, p);
 
-        return Finish(ctx, track);
+        ReplayPuppet puppet = Finish(ctx, track);
+        CreateNameTag(ctx, model);
+        return puppet;
+    }
+
+    private static void CreateNameTag(Ctx ctx, VRRig sourceRig)
+    {
+        if (ctx?.Puppet == null || sourceRig == null || sourceRig.playerText1 == null)
+            return;
+
+        Transform sourceTag = sourceRig.playerText1.transform;
+        string parentPath = sourceTag.parent != null ? PathOf(sourceTag.parent, sourceRig.transform) : "";
+        if (parentPath == null)
+            return;
+
+        try
+        {
+            Transform targetParent = Node(ctx, parentPath);
+            GameObject nameTagObject = UnityEngine.Object.Instantiate(sourceTag.gameObject, targetParent, false);
+            nameTagObject.transform.localPosition = sourceTag.localPosition;
+            nameTagObject.transform.localRotation = sourceTag.localRotation;
+            nameTagObject.transform.localScale = sourceTag.localScale;
+            TextMeshPro nameTag = nameTagObject.GetComponent<TextMeshPro>();
+            if (nameTag == null)
+            {
+                UnityEngine.Object.Destroy(nameTagObject);
+                return;
+            }
+            nameTag.text = ctx.Puppet.Track?.Name ?? "Gorilla";
+            nameTag.enabled = true;
+            nameTagObject.SetActive(true);
+            ctx.Puppet.NameTag = nameTag;
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"[MonkeFrames::Replay] Could not create replay name tag: {ex.Message}");
+        }
     }
 
     private static Ctx Begin(ReplayTrack track, Transform source)
@@ -632,7 +734,13 @@ public static class PuppetBuilder
         for (int i = 0; i < track.Paths.Length; i++)
             p.Parts[i] = Node(ctx, track.Paths[i]);
 
-        p.HeadNode = string.IsNullOrEmpty(track.HeadPath) ? null : Node(ctx, track.HeadPath);
+        // Old replays sometimes saved the head-mesh container (at the chest).
+        // Resolve the anatomical skull bone from the rig skeleton for those files.
+        string anatomicalPath = ctx.Source != null ? PathOf(ReplayRigBones.Head(ctx.Source.GetComponent<VRRig>()), ctx.Source) : null;
+        p.HeadNode = !string.IsNullOrEmpty(anatomicalPath) ? Node(ctx, anatomicalPath)
+            : string.IsNullOrEmpty(track.HeadPath) ? null : Node(ctx, track.HeadPath);
+        if (!track.HasEyePose)
+            ReplayRigBones.EyeOffset(out track.EyeLocalPosition, out track.EyeLocalRotation);
         p.LeftHandNode = string.IsNullOrEmpty(track.LeftHandPath) ? null : Node(ctx, track.LeftHandPath);
         p.RightHandNode = string.IsNullOrEmpty(track.RightHandPath) ? null : Node(ctx, track.RightHandPath);
 

@@ -16,6 +16,9 @@ public abstract class CamSubject : MonoBehaviour
 
     public abstract Transform Head { get; }
     public abstract Transform Hand(bool right);
+    public virtual Vector3 EyePosition => Head.position;
+    public virtual Quaternion EyeRotation => Head.rotation;
+    public virtual Transform VisualHead => Head;
 
     /// <summary>The object that carries the whole gorilla (kept sharp by motion blur).</summary>
     public virtual Transform Root => transform;
@@ -24,6 +27,7 @@ public abstract class CamSubject : MonoBehaviour
 /// <summary>A live gorilla (VRRig) in the current lobby, or yourself.</summary>
 public class LiveSubject : CamSubject
 {
+    public override Transform VisualHead => Replays.ReplayRigBones.Head(Rig);
     private VRRig _rig;
 
     public VRRig Rig => _rig != null ? _rig : _rig = GetComponent<VRRig>();
@@ -46,11 +50,27 @@ public class LiveSubject : CamSubject
             VRRig rig = Rig;
             if (rig.isOfflineVRRig && GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null)
                 return GorillaTagger.Instance.headCollider.transform;
-            if (rig.head != null && rig.head.rigTarget != null)
-                return rig.head.rigTarget;
-            if (rig.headMesh != null)
-                return rig.headMesh.transform;
-            return rig.transform;
+            return Replays.ReplayRigBones.Head(rig);
+        }
+    }
+
+    public override Vector3 EyePosition
+    {
+        get
+        {
+            if (IsLocal) return Head.position;
+            Replays.ReplayRigBones.EyeOffset(out var position, out _);
+            return Head.TransformPoint(position);
+        }
+    }
+
+    public override Quaternion EyeRotation
+    {
+        get
+        {
+            if (IsLocal) return Head.rotation;
+            Replays.ReplayRigBones.EyeOffset(out _, out var rotation);
+            return Head.rotation * rotation;
         }
     }
 
