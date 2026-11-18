@@ -12,19 +12,18 @@ public static class Constants
 {
     public const string Name = "MonkeFrames";
     public const string Guid = "com.monkeframes.MonkeFrames";
-    public const string Version = "2.1";
+    public const string Version = "2.2";
     public static readonly string VersionID = $"{Version}";
 
-    private static string _buildDate;
     public static string BuildDate
     {
         get
         {
-            _buildDate ??= Assembly.GetExecutingAssembly()
+            field ??= Assembly.GetExecutingAssembly()
                 .GetCustomAttributes<AssemblyMetadataAttribute>()
                 .FirstOrDefault(attr => attr.Key == "BuildTime")?.Value;
 
-            return _buildDate;
+            return field;
         }
     }
 

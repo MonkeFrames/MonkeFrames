@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+using MonkeFrames.Editor.Classes;
 using UnityEngine;
 using MonkeFrames.Compiler;
 using MonkeFrames.Compiler.Models;
@@ -12,7 +15,7 @@ namespace MonkeFrames.Editor.Windows;
 public class KeyframeEditor : IEditorWindow
 {
     public string Name => "Keyframe Editor";
-    public Rect Rect => new Rect(Screen.width - 620, 40, 600, 804);
+    public Rect Rect => new Rect(Screen.width - 620, 40, 600, Mathf.Min(842, Screen.height - 48));
 
     public Compiler.Models.Project Project => KeyframeManager.Instance.Project;
     public Vector2 KeyframeListScrollPos;
@@ -23,6 +26,7 @@ public class KeyframeEditor : IEditorWindow
     private const float ListHeight = 200f;
 
     private int _lastSelection = -2;
+    private string _anchorGuid;   // Shift+click ranges start here
 
     private static readonly string[] EffectNames = ["Linear", "Sine", "Ease In", "Ease Out", "Smooth", "Custom", "Cut"];
     private static readonly TransitionEffect[] EffectOrder =
@@ -30,6 +34,20 @@ public class KeyframeEditor : IEditorWindow
         TransitionEffect.Linear, TransitionEffect.Sine, TransitionEffect.EaseIn,
         TransitionEffect.EaseOut, TransitionEffect.Smooth, TransitionEffect.Custom, TransitionEffect.Cut,
     ];
+
+    private static string Clock(float h)
+    {
+        h = Mathf.Repeat(h, 24f);
+        int hh = Mathf.FloorToInt(h), mm = Mathf.Clamp(Mathf.RoundToInt((h - hh) * 60f), 0, 59);
+        return $"{hh:00}:{mm:00}";
+    }
+
+    /// <summary>The time Photoreal's sky shows by its own settings (ignoring keyframes); noon without Photoreal.</summary>
+    private static float CurrentHour()
+    {
+        float h = PhotorealLink.ShownHour;
+        return h >= 0f ? h : 12f;
+    }
 
     private static string Describe(TransitionEffect e) => e switch
     {
@@ -59,11 +77,32 @@ public class KeyframeEditor : IEditorWindow
         if (GUI.Button(new Rect(w - 196, 38, 90, 26), "+  Add", Theme.AccentButton))
             KeyframeManager.Instance.CreateKeyframe();
 
-        GUI.enabled = selection != -1;
-        if (GUI.Button(new Rect(w - 100, 38, 84, 26), "Delete", Theme.DangerButton))
+        // Auto smooth: a smooth curve through every keyframe, smoothed turning and zoom, softened speed changes -
+        // every transition keeps its own timing and custom speed graph
+        bool auto = Project.AutoSmooth;
+        if (GUI.Button(new Rect(136, 38, w - 316 - 136 - 8, 26),
+                new GUIContent(auto ? "Auto smooth: On" : "Auto smooth: Off",
+                    "Smooths the camera's path, turning and zoom through all keyframes for a cinematic move (no corners at keyframes). Every keyframe is still hit exactly and every transition keeps its own timing and custom speed graph. Strength: Project Settings."),
+                auto ? Theme.AccentButton : GUI.skin.button))
         {
-            KeyframeManager.Instance.DeleteKeyframe(selection);
-            UIManager.Instance.Selection = Mathf.Min(selection, keys.Count - 1);
+            Project.AutoSmooth = !auto;
+            UIManager.Instance.Status = Project.AutoSmooth
+                ? $"Auto smooth on ({Project.AutoSmoothStrength * 100f:0}%): the camera glides through your keyframes, keeping your speed graphs."
+                : "Auto smooth off: straight moves between keyframes again.";
+        }
+
+        if (GUI.Button(new Rect(w - 316, 38, 112, 26), new GUIContent("Close project", "Leave this keyframe project and start a fresh one (a backup is kept: Project > Reopen Last Closed).")))
+        {
+            KeyframeManager.Instance.CloseProject();
+            return;
+        }
+
+        GUI.enabled = selection != -1;
+        int selectedCount = KeyframeManager.Instance.SelectionCount;
+        if (GUI.Button(new Rect(w - 100, 38, 84, 26), selectedCount > 1 ? $"Delete {selectedCount}" : "Delete", Theme.DangerButton))
+        {
+            KeyframeManager.Instance.DeleteSelection();
+            if (UIManager.Instance.Selection >= keys.Count) UIManager.Instance.Selection = keys.Count - 1;
             selection = UIManager.Instance.Selection;
         }
         GUI.enabled = true;
@@ -136,10 +175,17 @@ public class KeyframeEditor : IEditorWindow
             Theme.Fill(new Rect(hr.x, hr.y + 8, 3, hr.height - 16), Theme.Accent.WithAlpha(ha), 1);
         }
 
+        KeyframeManager km = KeyframeManager.Instance;
         for (int i = 0; i < keys.Count; i++)
         {
             Keyframe k = keys[i];
-            bool selected = i == selection;
+            bool primary = i == selection;
+            bool selected = primary || km.IsSelected(i);
+
+            // Extra (Shift / Ctrl+click) selections get a softer, fading highlight; the primary has the sliding one.
+            float extra = Anim.To("kf.row.x." + k.GUID, selected && !primary ? 1f : 0f, 16f);
+            if (extra > 0.01f)
+                Theme.Fill(new Rect(2, i * (RowHeight + RowGap) + 4, content.width - 4, RowHeight), Theme.Accent.WithAlpha(0.11f * extra), 8);
 
             // New rows slide in from the right and fade up.
             float enter = Anim.OutCubic(Anim.To("kf.row." + k.GUID, 1f, 10f, 0f));
@@ -160,7 +206,7 @@ public class KeyframeEditor : IEditorWindow
 
             Theme.DrawText(new Rect(row.x + 44, row.y + 3, 200, 20), $"Keyframe {i + 1}", Theme.Title, Theme.Text);
             Theme.DrawText(new Rect(row.x + 44, row.y + 19, row.width - 200, 18),
-                $"pos {Vec(k.Position)}   rot {Vec(k.Rotation)}   fov {k.FieldOfView:0}{(k.MotionBlur ? "   blur" : "")}", Theme.MutedSmall, Theme.TextMuted);
+                $"pos {Vec(k.Position)}   rot {Vec(k.Rotation)}   fov {k.FieldOfView:0}{(k.MotionBlur ? "   blur" : "")}{(k.TimeOfDay >= 0 ? "   " + Clock(k.TimeOfDay) : "")}", Theme.MutedSmall, Theme.TextMuted);
 
             // Effect chip + duration
             string effect = EffectNames[System.Array.IndexOf(EffectOrder, k.Transition.Effect) is int ix and >= 0 ? ix : 0];
@@ -172,8 +218,9 @@ public class KeyframeEditor : IEditorWindow
 
             if (GUI.Button(row, GUIContent.none, GUIStyle.none))
             {
-                UIManager.Instance.Selection = i;
-                if (Event.current.clickCount > 1)
+                Event ev = Event.current;
+                ClickRow(i, ev.shift, ev.control || ev.command);
+                if (ev.clickCount > 1 && !ev.shift && !ev.control && !ev.command)
                     KeyframeManager.Instance.GoToKeyframe(i);
             }
 
@@ -183,16 +230,74 @@ public class KeyframeEditor : IEditorWindow
         GUI.EndScrollView();
     }
 
+    /// <summary>Plain click selects one keyframe, Shift+click a range, Ctrl+click adds / removes one.</summary>
+    private void ClickRow(int i, bool shift, bool ctrl)
+    {
+        KeyframeManager km = KeyframeManager.Instance;
+        var keys = Project.Keyframes;
+        int primary = UIManager.Instance.Selection;
+
+        if (shift && primary >= 0 && primary < keys.Count)
+        {
+            // Range from the last plain-clicked keyframe (or the current one) to this one.
+            int anchor = _anchorGuid != null ? keys.FindIndex(k => k.GUID == _anchorGuid) : -1;
+            if (anchor < 0) anchor = primary;
+
+            HashSet<int> picked = ctrl ? new HashSet<int>(km.SelectedIndices()) : new HashSet<int>();
+            for (int n = Mathf.Min(anchor, i); n <= Mathf.Max(anchor, i); n++) picked.Add(n);
+            km.SetSelection(i, picked);
+        }
+        else if (ctrl && primary >= 0 && primary < keys.Count)
+        {
+            List<int> picked = km.SelectedIndices();
+            if (picked.Contains(i))
+            {
+                if (picked.Count == 1) return;   // keep at least one selected
+                picked.Remove(i);
+                // Removing the primary hands it to the nearest remaining keyframe.
+                int next = i == primary ? picked.OrderBy(n => Mathf.Abs(n - i)).First() : primary;
+                km.SetSelection(next, picked);
+            }
+            else
+            {
+                picked.Add(i);
+                km.SetSelection(i, picked);
+            }
+            _anchorGuid = keys[i].GUID;
+        }
+        else
+        {
+            km.SetSelection(i, null);
+            _anchorGuid = keys[i].GUID;
+        }
+    }
+
     private void DrawProperties(Rect panel, int selection, float slide)
     {
-        var before = KeyframeManager.Instance.BeginPropertyEdit();
+        KeyframeManager km = KeyframeManager.Instance;
+
+        // Everything edited below is one undo step (a drag or typing in one field stays one step).
+        KeyframeHistory.State before = km.BeginPropertyEdit();
+
+        List<int> selected = km.SelectedIndices();
+        bool multi = selected.Count > 1;
+
         Keyframe k = Project.Keyframes[selection];
+        Keyframe orig = k;
 
         float x = panel.x + 14;
         float y = panel.y + 12 + slide;
         float innerW = panel.width - 28;
 
         GUI.Label(new Rect(x, y, 200, 20), "TRANSFORM", Theme.Header);
+        if (multi)
+        {
+            // Several keyframes: the settings below apply to all of them; the transform stays per keyframe.
+            Rect chip = new Rect(x + 96, y - 1, 170, 22);
+            Theme.Fill(chip, Theme.Accent.WithAlpha(0.2f), 11);
+            Theme.DrawText(chip, $"{selected.Count} keyframes selected", Theme.LabelCenterSmall, Theme.Accent);
+            GUI.Label(new Rect(chip.xMax + 8, y, panel.xMax - 128 - chip.xMax - 8, 20), "transform: one at a time", Theme.MutedSmall);
+        }
         if (GUI.Button(new Rect(panel.xMax - 120, y - 2, 106, 24), "Go to (F)"))
             KeyframeManager.Instance.GoToKeyframe(selection);
         y += 26;
@@ -200,6 +305,8 @@ public class KeyframeEditor : IEditorWindow
         float labelW = 70;
         float fieldW = (innerW - labelW - 16) / 3f;
 
+        // Position, rotation and FOV are per keyframe: read-only while several are selected.
+        GUI.enabled = !multi;
         GUI.Label(new Rect(x, y, labelW, 24), "Position");
         k.Position.x = Widgets.FloatField("px", new Rect(x + labelW, y, fieldW, 24), "X", Theme.AxisX, k.Position.x);
         k.Position.y = Widgets.FloatField("py", new Rect(x + labelW + fieldW + 8, y, fieldW, 24), "Y", Theme.AxisY, k.Position.y);
@@ -213,15 +320,42 @@ public class KeyframeEditor : IEditorWindow
         y += 30;
 
         GUI.Label(new Rect(x, y, labelW, 24), "FOV");
-        k.FieldOfView = Widgets.Slider("fov", new Rect(x + labelW, y, innerW - labelW - 90, 24), k.FieldOfView, 20f, 130f);
+        k.FieldOfView = SliderValue("fov", new Rect(x + labelW, y, innerW - labelW - 90, 24), k.FieldOfView, 20f, 130f);
         k.FieldOfView = Widgets.FloatField("fov", new Rect(x + innerW - 80, y, 80, 24), "°", Theme.TextMuted, k.FieldOfView);
+        GUI.enabled = true;
         y += 32;
+
+        // Time of day (photoreal sky): switch + hour slider, blends to the next keyframe's time
+        bool timeOn = k.TimeOfDay >= 0f;
+        bool newOn = Widgets.Switch("kf.time", new Rect(x, y, 150, 26), timeOn, "Time of day",
+            "Set the sky's time at this keyframe (needs the Photoreal graphics mod). It blends to the next keyframe's time during the transition (the short way round midnight). Off = use Photoreal's own time.");
+        if (newOn != timeOn)
+        {
+            k.TimeOfDay = newOn ? CurrentHour() : -1f;
+            PhotorealLink.KeyframeHour = k.TimeOfDay;
+        }
+        GUI.enabled = newOn;
+        float shown = newOn ? k.TimeOfDay : CurrentHour();
+        float hour = Widgets.Slider("kf.timeh", new Rect(x + 160, y, innerW - 160 - 150, 26), shown, 0f, 24f);
+        GUI.Label(new Rect(x + innerW - 144, y, 50, 26), Clock(newOn ? hour : shown), Theme.LabelRight);
+        if (newOn && Mathf.Abs(hour - k.TimeOfDay) > 1e-4f)
+        {
+            k.TimeOfDay = Mathf.Clamp(hour, 0f, 23.999f);
+            PhotorealLink.KeyframeHour = k.TimeOfDay;   // preview the change straight away
+        }
+        GUI.enabled = true;
+        if (GUI.Button(new Rect(x + innerW - 86, y, 86, 26), new GUIContent("Now", "Set this keyframe's time to the time Photoreal currently shows.")))
+        {
+            k.TimeOfDay = CurrentHour();
+            PhotorealLink.KeyframeHour = k.TimeOfDay;
+        }
+        y += 34;
 
         // Motion blur: switch + strength, plus a quick "apply to all"
         k.MotionBlur = Widgets.Switch("kf.blur", new Rect(x, y, 150, 26), k.MotionBlur, "Motion blur",
             "Blur the camera while it moves from this keyframe to the next (preview, playback and MP4 export).");
         GUI.enabled = k.MotionBlur;
-        k.MotionBlurStrength = Widgets.Slider("kf.blurstr", new Rect(x + 160, y, innerW - 160 - 150, 26), k.MotionBlurStrength, 0f, 1f);
+        k.MotionBlurStrength = SliderValue("kf.blurstr",new Rect(x + 160, y, innerW - 160 - 150, 26), k.MotionBlurStrength, 0f, 1f);
         GUI.Label(new Rect(x + innerW - 144, y, 50, 26), $"{k.MotionBlurStrength * 100f:0}%", Theme.LabelRight);
         GUI.enabled = true;
         if (GUI.Button(new Rect(x + innerW - 86, y, 86, 26), new GUIContent("All", "Copy this keyframe's motion blur setting to every keyframe.")))
@@ -259,7 +393,7 @@ public class KeyframeEditor : IEditorWindow
         GUI.Label(new Rect(x, y, leftW, 40), Describe(k.Transition.Effect), Theme.MutedWrap);
 
         GUI.Label(new Rect(x, y + 46, 70, 24), "Duration");
-        k.Transition.Duration = Widgets.Slider("dur", new Rect(x + 70, y + 46, leftW - 136, 24), k.Transition.Duration, 0f, 30f);
+        k.Transition.Duration = SliderValue("dur", new Rect(x + 70, y + 46, leftW - 136, 24), k.Transition.Duration, 0f, 30f);
         k.Transition.Duration = Mathf.Max(0f, Widgets.FloatField("dur", new Rect(x + leftW - 60, y + 46, 60, 24), "s", Theme.TextMuted, k.Transition.Duration));
 
         bool isSmooth = k.Transition.Effect == TransitionEffect.Smooth;
@@ -326,7 +460,57 @@ public class KeyframeEditor : IEditorWindow
         }
 
         Project.Keyframes[selection] = k;
-        KeyframeManager.Instance.EndPropertyEdit(before, $"keyframe:{k.GUID}");
+
+        if (multi)
+            ApplyToSelected(selected, selection, orig, k);
+
+        km.EndPropertyEdit(before, "keyframe:" + k.GUID);
+    }
+
+    /// <summary>Copies each setting changed on the primary keyframe (<paramref name="before"/> to
+    /// <paramref name="after"/>) to the other selected keyframes. Unchanged settings stay their own.</summary>
+    private void ApplyToSelected(List<int> selected, int primary, Keyframe before, Keyframe after)
+    {
+        Transition a = before.Transition, b = after.Transition;
+        bool effect = a.Effect != b.Effect;
+        bool duration = a.Duration != b.Duration;
+        bool curve = a.CurveX1 != b.CurveX1 || a.CurveY1 != b.CurveY1 || a.CurveX2 != b.CurveX2 || a.CurveY2 != b.CurveY2;
+        bool customSpeed = a.CustomSpeed != b.CustomSpeed;
+        bool blur = before.MotionBlur != after.MotionBlur;
+        bool blurStrength = before.MotionBlurStrength != after.MotionBlurStrength;
+        bool time = before.TimeOfDay != after.TimeOfDay;
+
+        if (!(effect || duration || curve || customSpeed || blur || blurStrength || time))
+            return;
+
+        var keys = Project.Keyframes;
+        foreach (int i in selected)
+        {
+            if (i == primary || i < 0 || i >= keys.Count)
+                continue;
+
+            Keyframe o = keys[i];
+            if (effect) o.Transition.Effect = b.Effect;
+            if (duration) o.Transition.Duration = b.Duration;
+            if (curve)
+            {
+                o.Transition.CurveX1 = b.CurveX1; o.Transition.CurveY1 = b.CurveY1;
+                o.Transition.CurveX2 = b.CurveX2; o.Transition.CurveY2 = b.CurveY2;
+            }
+            if (customSpeed) o.Transition.CustomSpeed = b.CustomSpeed;
+            if (blur) o.MotionBlur = after.MotionBlur;
+            if (blurStrength) o.MotionBlurStrength = after.MotionBlurStrength;
+            if (time) o.TimeOfDay = after.TimeOfDay;
+            keys[i] = o;
+        }
+    }
+
+    /// <summary>A slider that only changes the value when it's actually moved (values outside its range,
+    /// e.g. a typed 45 s duration, aren't clamped just by being shown).</summary>
+    private static float SliderValue(string id, Rect rect, float value, float min, float max)
+    {
+        float result = Widgets.Slider(id, rect, value, min, max);
+        return Mathf.Approximately(result, Mathf.Clamp(value, min, max)) ? value : result;
     }
 
     /// <summary>Draws the easing curve with a dot that travels along it on a loop.</summary>

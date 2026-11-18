@@ -40,9 +40,76 @@ public struct Transition
     [Newtonsoft.Json.JsonIgnore]
     public readonly bool UsesCurve => Effect == TransitionEffect.Custom || (Effect == TransitionEffect.Smooth && CustomSpeed);
 
+    /// <summary>Position's own timing to its next keyframe (Advanced Keyframe Editor). Null = this transition's.</summary>
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public LaneCurve? PositionCurve = null;
+    /// <summary>Rotation's own timing to its next keyframe. Null = this transition's.</summary>
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public LaneCurve? RotationCurve = null;
+    /// <summary>Zoom's own timing to its next keyframe. Null = this transition's.</summary>
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public LaneCurve? ZoomCurve = null;
+    /// <summary>Time of day's own timing to its next keyframe. Null = this transition's.</summary>
+    [Newtonsoft.Json.JsonProperty(NullValueHandling = Newtonsoft.Json.NullValueHandling.Ignore)]
+    public LaneCurve? TimeCurve = null;
+
+    /// <summary>`true` if any property has its own timing here.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public readonly bool HasLaneCurves => PositionCurve.HasValue || RotationCurve.HasValue || ZoomCurve.HasValue || TimeCurve.HasValue;
+
+    /// <summary>A property's own timing (null = the transition's).</summary>
+    public readonly LaneCurve? Lane(KeyLanes lane) => lane switch
+    {
+        KeyLanes.Position => PositionCurve,
+        KeyLanes.Rotation => RotationCurve,
+        KeyLanes.Zoom => ZoomCurve,
+        KeyLanes.TimeOfDay => TimeCurve,
+        _ => null,
+    };
+
+    /// <summary>Set a property's own timing (null = use the transition's).</summary>
+    public void SetLane(KeyLanes lane, LaneCurve? curve)
+    {
+        switch (lane)
+        {
+            case KeyLanes.Position: PositionCurve = curve; break;
+            case KeyLanes.Rotation: RotationCurve = curve; break;
+            case KeyLanes.Zoom: ZoomCurve = curve; break;
+            case KeyLanes.TimeOfDay: TimeCurve = curve; break;
+        }
+    }
+
+    /// <summary>The timing a property actually uses (its own, or the one made from this transition).</summary>
+    public readonly LaneCurve EffectiveLane(KeyLanes lane) => Lane(lane) ?? LaneCurve.From(this);
+
+    /// <summary>A number that changes whenever the timing changes.</summary>
+    public readonly int AnimationHash()
+    {
+        unchecked
+        {
+            int h = 17;
+            h = h * 31 + (int)Effect;
+            h = h * 31 + Duration.GetHashCode();
+            h = h * 31 + CurveX1.GetHashCode();
+            h = h * 31 + CurveY1.GetHashCode();
+            h = h * 31 + CurveX2.GetHashCode();
+            h = h * 31 + CurveY2.GetHashCode();
+            h = h * 31 + (CustomSpeed ? 1 : 0);
+            h = h * 31 + Hash(PositionCurve);
+            h = h * 31 + Hash(RotationCurve);
+            h = h * 31 + Hash(ZoomCurve);
+            h = h * 31 + Hash(TimeCurve);
+            return h;
+        }
+
+        static int Hash(LaneCurve? c) => !c.HasValue ? 0 : unchecked(((((int)c.Value.Interp + 3) * 397 ^ c.Value.X1.GetHashCode()) * 397
+            ^ c.Value.Y1.GetHashCode()) * 397 ^ c.Value.X2.GetHashCode() * 31 ^ c.Value.Y2.GetHashCode() * 7);
+    }
+
     /// <summary>
     /// Create a new Transition.
     /// </summary>
+    [Newtonsoft.Json.JsonConstructor]
     public Transition() { }
 
     /// <summary>

@@ -1,8 +1,9 @@
-using MonkeFrames.Editor.Replays;
 using MonkeFrames.Editor.Classes;
+using MonkeFrames.Editor.Replays;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Rendering;
 
 namespace MonkeFrames.Editor.Components;
 
@@ -36,7 +37,6 @@ public enum CameraMode
 public class CameraModes : MonoBehaviour
 {
     public static CameraModes Instance;
-    private FirstPersonHeadHider firstPersonHead;
 
     // ---- Current selection ----
     public CameraMode Mode { get; private set; } = CameraMode.Free;
@@ -61,9 +61,27 @@ public class CameraModes : MonoBehaviour
     public bool OrbitRelative = false;
     public float OrbitAngle { get => _orbitPitch; set => _orbitPitch = Mathf.Clamp(value, -80f, 85f); }
 
-    // ---- First person ----
-    public bool LevelHorizon = true;
-    public float ForwardOffset = 0.12f;
+    // ---- First person (saved in the settings file, see FirstPersonSettings) ----
+    private readonly FirstPersonSettings _fpFallback = new();
+    public FirstPersonSettings Fp => Settings.current?.FirstPerson ?? _fpFallback;
+    public bool LevelHorizon { get => Fp.LevelHorizon; set => Fp.LevelHorizon = value; }          // roll lock
+    public float ForwardOffset { get => Fp.Forward; set => Fp.Forward = value; }
+    public float FpUp { get => Fp.Up; set => Fp.Up = value; }            // metres above (+) / below (-) the eyes
+    public float FpSide { get => Fp.Side; set => Fp.Side = value; }      // metres right (+) / left (-)
+    public float FpPitch { get => Fp.Pitch; set => Fp.Pitch = value; }  // look up (+) / down (-), degrees
+    public float FpYaw { get => Fp.Yaw; set => Fp.Yaw = value; }        // look right (+) / left (-), degrees
+    public bool FpFollowPitch { get => Fp.FollowPitch; set => Fp.FollowPitch = value; }   // look up/down with the head
+    public float FpNearClip { get => Fp.NearClip; set => Fp.NearClip = value; }           // 0 = game default
+    public bool FpOffsetFollowsHead { get => Fp.OffsetFollowsHead; set => Fp.OffsetFollowsHead = value; }
+    public bool FpAngleClamp { get => Fp.AngleClamp; set => Fp.AngleClamp = value; }
+    public float FpMaxAngle { get => Fp.MaxAngle; set => Fp.MaxAngle = value; }
+    public bool FpShowClampGuide { get => Fp.ShowClampGuide; set => Fp.ShowClampGuide = value; }
+    public bool FpHideHeadCosmetics { get => Fp.HideHeadCosmetics; set => Fp.HideHeadCosmetics = value; }
+    public bool FpCastingStyle { get => Fp.CastingStyle; set => Fp.CastingStyle = value; }
+    public float FpFieldOfView { get => Fp.FieldOfView; set => Fp.FieldOfView = value; }
+    public float FpTurnSmooth { get => Fp.TurnSmooth; set => Fp.TurnSmooth = value; }
+    public float FpBobSmooth { get => Fp.BobSmooth; set => Fp.BobSmooth = value; }
+    private float _savedNearClip = -1f;
 
     // ---- Follow ----
     public float FollowDistance = 2.5f;
@@ -143,11 +161,7 @@ public class CameraModes : MonoBehaviour
     }
 
     private void OnEnable() => Application.onBeforeRender += OnBeforeRender;
-    private void OnDisable()
-    {
-        Application.onBeforeRender -= OnBeforeRender;
-        firstPersonHead?.Configure(CameraManager.Instance != null ? CameraManager.Instance.Camera : null, null);
-    }
+    private void OnDisable() => Application.onBeforeRender -= OnBeforeRender;
 
     private void OnBeforeRender()
     {
@@ -224,6 +238,7 @@ public class CameraModes : MonoBehaviour
             return;
 
         CameraManager cam = CameraManager.Instance;
+        ApplyNearClip(cam != null ? cam.Camera : null, -1f);
 
         if (Mode == CameraMode.Free)
         {
@@ -301,7 +316,12 @@ public class CameraModes : MonoBehaviour
         FieldOfView = 75f; Smoothing = 0.35f; PositionLag = 0f; LookHeight = 0f; Dutch = 0f; Shake = 0f;
         MotionBlur = false; MotionBlurStrength = 0.5f;
         OrbitAutoSpin = true; OrbitSpeed = 20f; OrbitDistance = 3f; OrbitHeight = 0.4f; OrbitRelative = false; _orbitPitch = 12f;
-        LevelHorizon = true; ForwardOffset = 0.12f;
+        if (Mode == CameraMode.FirstPerson)
+        {
+            var d = new FirstPersonSettings();
+            if (Settings.current != null) Settings.current.FirstPerson = d;
+            else { LevelHorizon = d.LevelHorizon; FpNearClip = d.NearClip; }
+        }
         FollowDistance = 2.5f; FollowHeight = 0.8f; FollowSide = 0f; FollowTurnLag = 0.5f;
         ShoulderSide = 0.45f; ShoulderBack = 1.1f; ShoulderHeight = 0.22f;
         TrackingAutoZoom = false; TrackingFrame = 1.2f;
@@ -334,8 +354,6 @@ public class CameraModes : MonoBehaviour
         OrbitAngle = settings.OrbitAngle;
         OrbitRelative = settings.OrbitRelative;
 
-        LevelHorizon = settings.LevelHorizon;
-        ForwardOffset = settings.ForwardOffset;
         FollowDistance = settings.FollowDistance;
         FollowHeight = settings.FollowHeight;
         FollowSide = settings.FollowSide;
@@ -386,8 +404,6 @@ public class CameraModes : MonoBehaviour
         settings.OrbitAngle = OrbitAngle;
         settings.OrbitRelative = OrbitRelative;
 
-        settings.LevelHorizon = LevelHorizon;
-        settings.ForwardOffset = ForwardOffset;
         settings.FollowDistance = FollowDistance;
         settings.FollowHeight = FollowHeight;
         settings.FollowSide = FollowSide;
@@ -413,8 +429,8 @@ public class CameraModes : MonoBehaviour
     public static string PlayerName(VRRig rig)
     {
         if (rig == null) return "nobody";
-        string displayed = rig.playerText1 != null ? rig.playerText1.text : null;
-        if (!string.IsNullOrWhiteSpace(displayed)) return displayed;
+        if (rig.isOfflineVRRig) return "You";
+
         string name = null;
         try { name = rig.Creator?.SanitizedNickName; } catch { }
         if (string.IsNullOrEmpty(name)) name = rig.playerNameVisible;
@@ -431,13 +447,11 @@ public class CameraModes : MonoBehaviour
             ScanPlayers();
         }
 
+        SaveFirstPersonIfChanged();
         CameraManager cam = CameraManager.Instance;
         _active = cam != null && Mode != CameraMode.Free && !cam.CinemachineState && !cam.InPlayback;
         if (!_active)
-        {
-            firstPersonHead?.Configure(cam != null ? cam.Camera : null, null);
             return;
-        }
 
         if (Target == null || !Target.Available)
         {
@@ -446,12 +460,11 @@ public class CameraModes : MonoBehaviour
             if (Target is ReplayPuppet && rm != null && rm.Viewing)
             {
                 _active = false;
-                firstPersonHead?.Configure(cam.Camera, null);
                 return;
             }
 
             Target = DefaultTarget();
-            if (Target == null) { _active = false; firstPersonHead?.Configure(cam.Camera, null); return; }
+            if (Target == null) { _active = false; return; }
             UIManager.Instance.Status = $"That player left, watching {Target.DisplayName} instead.";
         }
 
@@ -494,18 +507,24 @@ public class CameraModes : MonoBehaviour
 
         Transform headT = Target.Head;
         Vector3 head = headT.position;
+        if (_haveLastHead && (head - _lastHead).sqrMagnitude > 3f * 3f) _snap = true;
+        _lastHead = head; _haveLastHead = true;
         Quaternion headRot = headT.rotation;
         Vector3 headFwd = headRot * Vector3.forward;
 
+        CameraMode shotNow = Mode == CameraMode.Director ? _directorShot : Mode;
+        bool fp = shotNow == CameraMode.FirstPerson;
+
         // Smoothing eases angle / offset changes only.
-        float rate = Mathf.Lerp(40f, 2.5f, Mathf.Clamp01(Smoothing));
+        float rate = Mathf.Lerp(40f, 2.5f, Mathf.Clamp01(fp ? FpTurnSmooth : Smoothing));
         float k = _snap ? 1f : 1f - Mathf.Exp(-rate * dt);
 
         // Optional positional lag (0 = rigidly locked to the player = no lag).
-        if (PositionLag <= 0.001f || _snap)
+        float lag = fp ? FpBobSmooth : PositionLag;
+        if (lag <= 0.001f || _snap)
             _lagPivot = head;
         else
-            _lagPivot = Vector3.Lerp(_lagPivot, head, 1f - Mathf.Exp(-Mathf.Lerp(40f, 2f, PositionLag) * dt));
+            _lagPivot = Vector3.Lerp(_lagPivot, head, 1f - Mathf.Exp(-Mathf.Lerp(40f, 2f, lag) * dt));
         Vector3 pivot = _lagPivot;
         Vector3 aim = pivot + Vector3.up * LookHeight;
 
@@ -515,8 +534,6 @@ public class CameraModes : MonoBehaviour
         Quaternion facing = Quaternion.Euler(0f, _facingYaw, 0f);
 
         CameraMode shot = Mode == CameraMode.Director ? _directorShot : Mode;
-        if (firstPersonHead == null) firstPersonHead = gameObject.AddComponent<FirstPersonHeadHider>();
-        firstPersonHead.Configure(cam.Camera, shot == CameraMode.FirstPerson ? Target.VisualHead : null);
 
         Vector3 pos;
         Quaternion rot;
@@ -525,13 +542,49 @@ public class CameraModes : MonoBehaviour
         {
             case CameraMode.FirstPerson:
             {
-                Quaternion eyeRotation = Target.EyeRotation;
-                Vector3 eyeForward = eyeRotation * Vector3.forward;
-                pos = Target.EyePosition + eyeForward * ForwardOffset * Mathf.Abs(Target.Root.lossyScale.x);
-                Quaternion want = LevelHorizon ? LookAt(Vector3.zero, eyeForward) : eyeRotation;
-                _smoothRot = Quaternion.Slerp(_smoothRot, want, k);
+                // CastingShouldBeFree's first person (GPL-2.0, see THIRD-PARTY-NOTICES): the camera sits inside the
+                // gorilla's head mesh, 0.15 m up, and looks exactly where the head looks; only turning is smoothed.
+                Transform fpHead = FpCastingStyle ? CastingHead(Target) : null;
+                if (fpHead != null)
+                {
+                    pos = fpHead.TransformPoint(new Vector3(0f, 0.15f, 0f));
+                    Quaternion headLook = fpHead.rotation;
+                    float ts = Mathf.Clamp01(FpTurnSmooth);
+                    _smoothRot = _snap || ts <= 0.001f
+                        ? headLook
+                        : Quaternion.Slerp(_smoothRot, headLook, 1f - Mathf.Exp(-dt * Mathf.Lerp(40f, 0.8f, Mathf.Pow(ts, 0.6f))));
+                    rot = _smoothRot;
+                    _offset = pos - pivot;
+                    _fpHeadFwd = fpHead.forward;
+                    break;
+                }
+
+                // Offsets: in head space (they move with every head tilt, like a camera strapped to the head),
+                // or in a level frame (looking up / down doesn't swing the camera vertically)
+                if (FpOffsetFollowsHead)
+                    pos = pivot + headRot * new Vector3(FpSide, FpUp, ForwardOffset);
+                else
+                {
+                    Quaternion frame = LevelHorizon ? Quaternion.Euler(0f, YawOf(headFwd), 0f) : headRot;
+                    pos = pivot + headFwd * ForwardOffset + frame * new Vector3(FpSide, FpUp, 0f);
+                }
+
+                Vector3 lookDir = FpFollowPitch ? headFwd : Flat(headFwd);
+                Quaternion baseRot = LevelHorizon || !FpFollowPitch ? LookAt(Vector3.zero, lookDir) : headRot;
+                Quaternion want = baseRot * Quaternion.Euler(-FpPitch, FpYaw, 0f);
+                // angle clamping: however fast the head turns, the smoothed view never falls more than MaxAngle behind
+                if (FpAngleClamp && !_snap && Quaternion.Angle(_smoothRot, want) > FpMaxAngle)
+                    _smoothRot = Quaternion.RotateTowards(want, _smoothRot, Mathf.Max(FpMaxAngle, 0f));
+                _smoothRot = _snap ? want : Quaternion.Slerp(_smoothRot, want, k);
+                if (LevelHorizon)
+                {
+                    // roll lock: whatever the smoothing did, the horizon stays level
+                    Vector3 f = _smoothRot * Vector3.forward;
+                    if (Mathf.Abs(f.y) < 0.999f) _smoothRot = Quaternion.LookRotation(f, Vector3.up);
+                }
                 rot = _smoothRot;
                 _offset = pos - pivot;
+                _fpHeadFwd = headFwd;
                 break;
             }
 
@@ -601,7 +654,7 @@ public class CameraModes : MonoBehaviour
         }
 
         // ---- Field of view ----
-        float wantFov = FieldOfView;
+        float wantFov = shot == CameraMode.FirstPerson ? FpFieldOfView : FieldOfView;
         if (shot == CameraMode.Tracking && TrackingAutoZoom)
         {
             float dist = Mathf.Max(0.1f, Vector3.Distance(pos, head));
@@ -629,12 +682,253 @@ public class CameraModes : MonoBehaviour
         cam.FieldOfView = _smoothFov;
         cam.transform.SetPositionAndRotation(pos, rot);
         if (cam.Camera != null)
+        {
             cam.Camera.fieldOfView = _smoothFov;
+            ApplyNearClip(cam.Camera, shot == CameraMode.FirstPerson && FpNearClip > 0.0005f ? FpNearClip : -1f);
+        }
         if (cam.CameraMarker != null)
             cam.CameraMarker.transform.SetPositionAndRotation(pos, rot);
 
         // The watched gorilla is kept sharp in the blur while the world streaks past.
         cam.Blur.Set(MotionBlur, MotionBlurStrength, Target != null ? Target.Root : null);
+    }
+
+    private Vector3 _lastHead;
+    private bool _haveLastHead;
+
+    // ---------------- First person extras ----------------
+
+    /// <summary>The head mesh casting-style first person rides on (live and replay gorillas).</summary>
+    private static Transform CastingHead(CamSubject target)
+    {
+        try
+        {
+            if (target is ReplayPuppet rp) return rp.HeadMeshNode;
+            return target is LiveSubject ls && ls.Rig != null && ls.Rig.headMesh != null ? ls.Rig.headMesh.transform : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>A replay gorilla's hat and face cosmetics (copied ones, by their recorded cosmetic ID, and the real
+    /// game cosmetics loaded for it), never its body.</summary>
+    private static void AddReplayHatAndFace(ReplayPuppet p, List<Renderer> into)
+    {
+        try
+        {
+            ReplayTrack t = p.Track;
+            var controller = GorillaNetworking.CosmeticsController.instance;
+            if (t == null || controller == null || p.BuildCtx == null) return;
+            bool IsHeadItem(string id)
+            {
+                if (string.IsNullOrEmpty(id)) return false;
+                var c = controller.GetItemFromDict(id).itemCategory;
+                return c == GorillaNetworking.CosmeticsController.CosmeticCategory.Hat || c == GorillaNetworking.CosmeticsController.CosmeticCategory.Face;
+            }
+            for (int i = 0; i < t.RendererPaths.Length && i < t.RendererCosmeticIds.Length; i++)
+                if (IsHeadItem(t.RendererCosmeticIds[i]) && p.BuildCtx.Nodes.TryGetValue(t.RendererPaths[i], out Transform n) && n != null)
+                {
+                    Renderer r = n.GetComponent<Renderer>();
+                    if (r != null && !into.Contains(r)) into.Add(r);
+                }
+            foreach (GameObject holder in p.AddressableCosmetics)
+                if (holder != null && holder.name.StartsWith("Replay Cosmetic ") && IsHeadItem(holder.name.Substring("Replay Cosmetic ".Length)))
+                    foreach (Renderer r in holder.GetComponentsInChildren<Renderer>(false))
+                        if (!into.Contains(r)) into.Add(r);
+            // never the body
+            if (!string.IsNullOrEmpty(t.MainSkinPath) && p.BuildCtx.Nodes.TryGetValue(t.MainSkinPath, out Transform skin) && skin != null)
+                into.Remove(skin.GetComponent<Renderer>());
+        }
+        catch { }
+    }
+
+    /// <summary>Renderers of the hat and face cosmetics a gorilla wears (CastingShouldBeFree hides exactly these).</summary>
+    private static void AddHatAndFaceRenderers(VRRig rig, List<Renderer> into)
+    {
+        try
+        {
+            if (rig == null || rig.cosmeticsObjectRegistry == null) return;
+            foreach (var item in rig.cosmeticSet.items)
+            {
+                if (string.IsNullOrEmpty(item.displayName)) continue;
+                if (item.itemCategory != GorillaNetworking.CosmeticsController.CosmeticCategory.Face &&
+                    item.itemCategory != GorillaNetworking.CosmeticsController.CosmeticCategory.Hat) continue;
+                var inst = rig.cosmeticsObjectRegistry.Cosmetic(item.displayName);
+                if (inst?.allRenderers == null) continue;
+                foreach (Renderer r in inst.allRenderers)
+                    if (r != null && !into.Contains(r)) into.Add(r);
+            }
+            if (rig.headMesh != null)
+                foreach (Renderer r in rig.headMesh.GetComponentsInChildren<Renderer>(false))
+                    if (r != null && r != rig.mainSkin && !into.Contains(r)) into.Add(r);
+        }
+        catch { }
+    }
+
+    private Vector3 _fpHeadFwd = Vector3.forward;
+    private readonly List<Renderer> _headRenderers = new();
+    private readonly List<Renderer> _hiddenHead = new();
+    private Transform _headRenderersOf;
+    private float _nextHeadScan;
+    private string _fpSaved;
+    private float _nextFpSaveCheck;
+
+    /// <summary>Hats, glasses and face items on the watched gorilla's head are hidden from the MonkeFrames camera
+    /// (only while it renders, so VR and everyone else still see them).</summary>
+    private void OnBeginCameraFp(ScriptableRenderContext ctx, Camera c)
+    {
+        CameraManager cm = CameraManager.Instance;
+        if (cm == null || c != cm.Camera) return;
+        CameraMode shot = Mode == CameraMode.Director ? _directorShot : Mode;
+        if (!_active || shot != CameraMode.FirstPerson || !FpHideHeadCosmetics || Target == null) return;
+        Transform head = Target.Head;
+        if (head == null) return;
+        if (head != _headRenderersOf || Time.unscaledTime >= _nextHeadScan)
+        {
+            _headRenderersOf = head;
+            _nextHeadScan = Time.unscaledTime + 2f;
+            _headRenderers.Clear();
+            // the head bone: hats, glasses, face items and the face all hang under it (the recorded head *target*
+            // is a separate tracking object with nothing on it)
+            Transform scan = head;
+            if (Target is ReplayPuppet rp)
+                scan = rp.HeadMeshNode != null && rp.HeadMeshNode.parent != null ? rp.HeadMeshNode.parent : rp.HeadNode != null ? rp.HeadNode : head;
+            else if (Target is LiveSubject live && live.Rig != null && live.Rig.headMesh != null && live.Rig.headMesh.transform.parent != null)
+                scan = live.Rig.headMesh.transform.parent;
+            scan.GetComponentsInChildren(false, _headRenderers);
+            if (scan != head)
+                foreach (Renderer r in head.GetComponentsInChildren<Renderer>(false))
+                    if (!_headRenderers.Contains(r)) _headRenderers.Add(r);
+            // hats and face items wherever they hang (your own aren't under the head collider)
+            if (Target is LiveSubject ls) AddHatAndFaceRenderers(ls.Rig, _headRenderers);
+            else if (Target is ReplayPuppet puppet) AddReplayHatAndFace(puppet, _headRenderers);
+        }
+        foreach (Renderer r in _headRenderers)
+            if (r != null && r.enabled && !r.forceRenderingOff) { r.forceRenderingOff = true; _hiddenHead.Add(r); }
+    }
+
+    private void OnEndCameraFp(ScriptableRenderContext ctx, Camera c) => RestoreHead();
+
+    private void RestoreHead()
+    {
+        if (_hiddenHead.Count == 0) return;
+        foreach (Renderer r in _hiddenHead) if (r != null) r.forceRenderingOff = false;
+        _hiddenHead.Clear();
+    }
+
+    /// <summary>
+    /// Put back anything the first person camera hid (hats, face items, the face) before the replay recorder
+    /// looks at the gorilla, so a replay recorded in first person still has them.
+    /// </summary>
+    internal static void RestoreHiddenHead() => Instance?.RestoreHead();
+
+    /// <summary>True for a renderer the first person camera is hiding from itself right now.</summary>
+    internal static bool HiddenByFirstPerson(Renderer r) => Instance != null && r != null && Instance._hiddenHead.Contains(r);
+
+    private void Awake()
+    {
+        // desktop mode (no gravity / anti AFK kick without a headset) lives next to the camera modes
+        if (GetComponent<DesktopMode>() == null) gameObject.AddComponent<DesktopMode>();
+        RenderPipelineManager.beginCameraRendering += OnBeginCameraFp;
+        RenderPipelineManager.endCameraRendering += OnEndCameraFp;
+    }
+
+    private void OnDestroy()
+    {
+        RenderPipelineManager.beginCameraRendering -= OnBeginCameraFp;
+        RenderPipelineManager.endCameraRendering -= OnEndCameraFp;
+    }
+
+    /// <summary>First person settings are saved to the settings file a moment after they change.</summary>
+    private void SaveFirstPersonIfChanged()
+    {
+        if (Settings.current == null || Time.unscaledTime < _nextFpSaveCheck) return;
+        _nextFpSaveCheck = Time.unscaledTime + 1.5f;
+        string now = Newtonsoft.Json.JsonConvert.SerializeObject(Settings.current.FirstPerson);
+        if (_fpSaved == null) { _fpSaved = now; return; }
+        if (now == _fpSaved) return;
+        _fpSaved = now;
+        try { Settings.Save(); } catch { }
+    }
+
+    /// <summary>Angle-clamp guide: a circle for how far the view may lag behind the head, a dot where the head points.</summary>
+    private static Texture2D _guideRing, _guideDot;
+    private void OnGUI()
+    {
+        if (Event.current.type != EventType.Repaint || !_active || !FpShowClampGuide || !FpAngleClamp) return;
+        CameraMode shot = Mode == CameraMode.Director ? _directorShot : Mode;
+        if (shot != CameraMode.FirstPerson) return;
+        CameraManager cm = CameraManager.Instance;
+        Camera c = cm != null ? cm.Camera : null;
+        if (c == null) return;
+        _guideRing ??= GuideTex(true);
+        _guideDot ??= GuideTex(false);
+        Rect vp = new Rect(c.rect.x * Screen.width, (1f - c.rect.y - c.rect.height) * Screen.height, c.rect.width * Screen.width, c.rect.height * Screen.height);
+        float r = Mathf.Tan(Mathf.Clamp(FpMaxAngle, 1f, 85f) * Mathf.Deg2Rad) / Mathf.Tan(c.fieldOfView * 0.5f * Mathf.Deg2Rad) * vp.height * 0.5f;
+        Vector2 center = vp.center;
+        GUI.DrawTexture(new Rect(center.x - r, center.y - r, r * 2f, r * 2f), _guideRing);
+        Vector3 sp = c.WorldToScreenPoint(c.transform.position + _fpHeadFwd);
+        if (sp.z > 0f)
+        {
+            Vector2 p = new Vector2(sp.x, Screen.height - sp.y);
+            GUI.DrawTexture(new Rect(p.x - 6f, p.y - 6f, 12f, 12f), _guideDot);
+        }
+    }
+
+    private static Texture2D GuideTex(bool ring)
+    {
+        const int n = 128;
+        var t = new Texture2D(n, n, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, filterMode = FilterMode.Bilinear };
+        var px = new Color32[n * n];
+        for (int y = 0; y < n; y++)
+        for (int x = 0; x < n; x++)
+        {
+            float dx = (x + 0.5f) / n * 2f - 1f, dy = (y + 0.5f) / n * 2f - 1f;
+            float d = Mathf.Sqrt(dx * dx + dy * dy);
+            float a = ring ? Mathf.Clamp01(1f - Mathf.Abs(d - 0.97f) * 60f) * 0.8f + (d < 0.97f ? 0.08f : 0f)
+                           : Mathf.Clamp01((1f - d) * 8f);
+            px[y * n + x] = ring ? new Color32(255, 255, 255, (byte)(a * 255)) : new Color32(255, 70, 70, (byte)(a * 255));
+        }
+        t.SetPixels32(px);
+        t.Apply();
+        return t;
+    }
+
+    /// <summary>Custom near clip for first person (so the gorilla's own head/face doesn't block the view). -1 restores it.</summary>
+    public void ApplyNearClip(Camera c, float near)
+    {
+        if (c == null) return;
+        if (near > 0f)
+        {
+            if (_savedNearClip < 0f) _savedNearClip = c.nearClipPlane;
+            c.nearClipPlane = near;
+        }
+        else if (_savedNearClip > 0f)
+        {
+            c.nearClipPlane = _savedNearClip;
+            _savedNearClip = -1f;
+        }
+    }
+
+    public void ApplyFirstPersonPreset(string name)
+    {
+        (ForwardOffset, FpUp, FpSide, FpPitch, FpYaw) = name switch
+        {
+            "Eyes" => (0.12f, 0f, 0f, 0f, 0f),
+            "Forehead" => (0.1f, 0.12f, 0f, -4f, 0f),
+            "Chest" => (0.16f, -0.38f, 0f, 4f, 0f),
+            "Behind head" => (-0.45f, 0.18f, 0f, -6f, 0f),
+            "Side" => (0.05f, 0.05f, 0.3f, 0f, -8f),
+            "Head cam" => (0f, 0f, 0f, 0f, 0f),
+            _ => (ForwardOffset, FpUp, FpSide, FpPitch, FpYaw),
+        };
+        if (name == "Head cam")
+        {
+            // head-mounted camera look (like Pokruk's Camera Mod first person): wide FOV, offset fixed to the head,
+            // light smoothing held in by angle clamping, roll locked, cosmetics out of the way
+            FpOffsetFollowsHead = true; FpFollowPitch = true; LevelHorizon = true;
+            FpFieldOfView = 100f; FpTurnSmooth = 0.3f; FpAngleClamp = true; FpMaxAngle = 30f;
+            FpNearClip = 0.01f; FpHideHeadCosmetics = true; FpBobSmooth = 0f;
+        }
     }
 
     private static Quaternion LookAt(Vector3 from, Vector3 to)

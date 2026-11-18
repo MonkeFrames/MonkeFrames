@@ -25,6 +25,8 @@ public static class IntroScreen
 
     private static float _start = -1f;
     private static bool _done;
+    /// <summary>Only a replay you started yourself (MonkeFrames > Play Intro) can be skipped; the startup intro plays in full.</summary>
+    private static bool _skippable;
 
     public static bool Active => !_done && Logo != null;
 
@@ -36,6 +38,7 @@ public static class IntroScreen
     {
         _start = -1f;
         _done = false;
+        _skippable = true;
     }
 
     public static void Skip() => _done = true;
@@ -54,8 +57,8 @@ public static class IntroScreen
             _start = Time.unscaledTime;
         }
 
-        // Skip on any key or click: jump straight to the exit animation.
-        if ((e.type == EventType.KeyDown || e.type == EventType.MouseDown) && Time.unscaledTime - _start < ExitStart)
+        // A replayed intro skips on any key or click: jump straight to the exit animation.
+        if (_skippable && (e.type == EventType.KeyDown || e.type == EventType.MouseDown) && Time.unscaledTime - _start < ExitStart)
         {
             _start = Time.unscaledTime - ExitStart;
             e.Use();

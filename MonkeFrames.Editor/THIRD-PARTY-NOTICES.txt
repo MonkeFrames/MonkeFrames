@@ -1,0 +1,21 @@
+MonkeFrames - third-party notices
+=================================
+
+Acknowledgement: Pokruk's Camera Mod (github.com/Pokruk/CameraMod)
+
+The first person camera options (angle clamping, head-space offset, head cosmetics
+hiding, clamp guide, saved first person settings) follow the features of Pokruk's
+Camera Mod. They were written for MonkeFrames from scratch; no code from that
+project is included.
+
+-------------------------------------------------------------------------------
+First person camera: CastingShouldBeFree by HanSolo1000Falcon
+(hansolo1000falcon.castingshouldbefree), GNU General Public License v2.0
+
+The "Casting style" first person (Other Cameras > First Person) follows CastingShouldBeFree's
+FirstPersonModeHandler / CameraHandler: the camera rides inside the watched gorilla's head mesh,
+0.15 m up, with the head's rotation and turn-only smoothing, and their hat and face cosmetics are
+hidden. MonkeFrames hides them from its own camera only (VR is unchanged).
+
+Because this build contains GPL-2.0 code, anyone you give it to must also be able to get its
+full source under the GPL-2.0 (see LICENSE-GPL-2.0.txt). For your own use nothing changes.

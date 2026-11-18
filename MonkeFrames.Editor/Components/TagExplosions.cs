@@ -123,8 +123,19 @@ public class TagExplosions : MonoBehaviour
         public bool Ember;
     }
 
+    // Explosion style: soft billboards of fire and smoke
+    private struct Puff
+    {
+        public Vector3 Pos, Vel;
+        public float Size, Grow, Life, Age, Delay, Drag, Rise;
+    }
+
     private sealed class Burst
     {
+        public bool Fire;                       // explosion style (fireball + smoke) instead of the neon burst
+        public Puff[] Fireballs, Smoke;
+        public GameObject SmokeGo;
+        public Mesh SmokeMesh;
         public GameObject Go;
         public Mesh Mesh;
         public Light Light;
@@ -154,6 +165,7 @@ public class TagExplosions : MonoBehaviour
         Settings s = S;
         if (s == null || !EnsureMaterial()) return;
         if (_bursts.Count >= 12) Kill(_bursts[0]);
+        if (s.TagFXStyle == 1) { ExplodeFire(pos, s); return; }
 
         gorilla.a = 1f;
         Color primary = s.TagFXColorMode switch
@@ -251,6 +263,151 @@ public class TagExplosions : MonoBehaviour
         Build(b);
     }
 
+    private static readonly Color FireHot = new Color(1f, 0.93f, 0.72f), FireOrange = new Color(1f, 0.48f, 0.09f), FireRed = new Color(0.55f, 0.08f, 0.02f);
+
+    /// <summary>Explosion style: white-hot flash, rolling fireballs that cool from yellow to deep red, hot debris,
+    /// a ground shockwave, dark smoke that rises and spreads, a flickering orange light and a big boom.</summary>
+    private void ExplodeFire(Vector3 pos, Settings s)
+    {
+        Burst b = new Burst
+        {
+            Fire = true,
+            Center = pos,
+            Duration = Mathf.Clamp(s.TagFXDuration, 0.2f, 5f),
+            Size = Mathf.Clamp(s.TagFXSize, 0.1f, 5f),
+            Intensity = Mathf.Clamp(s.TagFXIntensity, 0f, 5f),
+            Primary = FireOrange,
+            Secondary = new Color(1f, 0.8f, 0.3f),
+            Flash = s.TagFXFlash,
+        };
+        float sz = b.Size, D = b.Duration;
+
+        b.Go = new GameObject("MonkeFrames Tag Explosion") { layer = 0 };
+        b.Go.transform.position = pos;
+        b.Mesh = new Mesh { name = "MonkeFrames Tag Explosion" };
+        b.Mesh.MarkDynamic();
+        b.Go.AddComponent<MeshFilter>().sharedMesh = b.Mesh;
+        MeshRenderer mr = b.Go.AddComponent<MeshRenderer>();
+        mr.sharedMaterial = _mat;
+        mr.shadowCastingMode = ShadowCastingMode.Off;
+        mr.receiveShadows = false;
+
+        // smoke: a second mesh drawn normally (not glowing), so it can darken what's behind it
+        b.SmokeGo = new GameObject("MonkeFrames Tag Explosion Smoke") { layer = 0 };
+        b.SmokeGo.transform.SetParent(b.Go.transform, false);
+        b.SmokeMesh = new Mesh { name = "MonkeFrames Tag Explosion Smoke" };
+        b.SmokeMesh.MarkDynamic();
+        b.SmokeGo.AddComponent<MeshFilter>().sharedMesh = b.SmokeMesh;
+        MeshRenderer smr = b.SmokeGo.AddComponent<MeshRenderer>();
+        smr.sharedMaterial = _mat;
+        smr.shadowCastingMode = ShadowCastingMode.Off;
+        smr.receiveShadows = false;
+
+        // fireballs: puffs that burst outwards (a bit upwards), slow down and swell
+        int nf = 16;
+        b.Fireballs = new Puff[nf];
+        for (int i = 0; i < nf; i++)
+        {
+            Vector3 dir = Random.onUnitSphere;
+            dir.y = Mathf.Abs(dir.y) * 0.7f + 0.2f;
+            b.Fireballs[i] = new Puff
+            {
+                Pos = pos + Random.insideUnitSphere * 0.15f * sz,
+                Vel = dir.normalized * Random.Range(1.5f, 4.5f) * sz,
+                Size = Random.Range(0.25f, 0.45f) * sz,
+                Grow = Random.Range(0.8f, 1.5f) * sz,
+                Life = D * Random.Range(0.45f, 0.85f),
+                Delay = i < 5 ? 0f : Random.Range(0f, 0.08f) * D,
+                Drag = Random.Range(3f, 5f),
+                Rise = 1.2f * sz,
+            };
+        }
+
+        // smoke: starts a moment later inside the fireball, rises and spreads for a long time
+        int ns = 14;
+        b.Smoke = new Puff[ns];
+        for (int i = 0; i < ns; i++)
+        {
+            Vector3 dir = Random.onUnitSphere;
+            dir.y = Mathf.Abs(dir.y) * 0.5f + 0.3f;
+            b.Smoke[i] = new Puff
+            {
+                Pos = pos + Random.insideUnitSphere * 0.4f * sz,
+                Vel = dir.normalized * Random.Range(0.6f, 1.8f) * sz,
+                Size = Random.Range(0.4f, 0.7f) * sz,
+                Grow = Random.Range(1.2f, 2.2f) * sz,
+                Life = D * Random.Range(2.2f, 3.2f),
+                Delay = D * Random.Range(0.08f, 0.3f),
+                Drag = Random.Range(1.2f, 2f),
+                Rise = Random.Range(0.8f, 1.5f) * sz,
+            };
+        }
+
+        // hot debris: fast sparks that arc down, plus a few slow glowing embers
+        int count = Mathf.Clamp(s.TagFXSparks, 0, 400);
+        float speed = Mathf.Clamp(s.TagFXSparkSpeed, 0f, 4f) * 1.3f;
+        b.Sparks = new Spark[count];
+        for (int i = 0; i < count; i++)
+        {
+            bool ember = i % 4 == 3;
+            Vector3 dir = Random.onUnitSphere;
+            dir.y = Mathf.Abs(dir.y) * 0.9f + 0.1f;
+            float v = ember ? Random.Range(0.6f, 1.6f) : Random.Range(3f, 9f);
+            b.Sparks[i] = new Spark
+            {
+                Pos = pos + dir * 0.1f * sz,
+                Vel = dir.normalized * v * speed * sz,
+                Size = (ember ? Random.Range(0.04f, 0.08f) : Random.Range(0.02f, 0.04f)) * sz,
+                Life = D * (ember ? Random.Range(1.2f, 1.8f) : Random.Range(0.5f, 1.1f)),
+                Drag = ember ? 1f : Random.Range(0.8f, 1.6f),
+                Grav = (ember ? -0.25f : 1.6f) * Mathf.Clamp(s.TagFXGravity, 0f, 3f) * 6f * sz,
+                Color = Random.value < 0.6f ? FireOrange : b.Secondary,
+                Ember = ember,
+            };
+        }
+
+        // one shockwave ring along the ground
+        int rings = Mathf.Min(1, Mathf.Clamp(s.TagFXRings, 0, 4));
+        b.Rings = new Quaternion[rings];
+        b.RingColors = new Color[rings];
+        for (int i = 0; i < rings; i++) { b.Rings[i] = Quaternion.Euler(90f, 0f, 0f); b.RingColors[i] = new Color(1f, 0.6f, 0.25f); }
+
+        if (s.TagFXLight)
+        {
+            b.Light = b.Go.AddComponent<Light>();
+            b.Light.type = LightType.Point;
+            b.Light.color = new Color(1f, 0.55f, 0.2f);
+            b.Light.range = 9f * sz;
+            b.Light.intensity = 0f;
+            b.Light.shadows = LightShadows.None;
+        }
+
+        if (s.TagFXSound && s.TagFXVolume > 0.001f)
+        {
+            try
+            {
+                AudioSource a = b.Go.AddComponent<AudioSource>();
+                a.spatialBlend = 0.6f;
+                a.minDistance = 5f;
+                a.maxDistance = 120f;
+                a.rolloffMode = AudioRolloffMode.Linear;
+                a.dopplerLevel = 0f;
+                a.pitch = Random.Range(0.92f, 1.06f) / Mathf.Lerp(1f, 1.25f, Mathf.InverseLerp(1f, 3f, sz));
+                a.PlayOneShot(Blast(), Mathf.Clamp01(s.TagFXVolume) * 1.2f);
+            }
+            catch { }
+        }
+
+        _bursts.Add(b);
+        Build(b);
+    }
+
+    private static Color FireColor(float t)
+    {
+        // white-hot -> orange -> deep red, as the fire cools
+        return t < 0.25f ? Color.Lerp(FireHot, FireOrange, t / 0.25f) : Color.Lerp(FireOrange, FireRed, Mathf.Clamp01((t - 0.25f) / 0.6f));
+    }
+
     /// <summary>Make any colour neon: full saturation and brightness (keeps near-greys white-ish).</summary>
     private static Color Neon(Color c)
     {
@@ -266,7 +423,7 @@ public class TagExplosions : MonoBehaviour
             Burst b = _bursts[i];
             b.Age += dt;
 
-            float longest = b.Duration * 1.35f;
+            float longest = b.Fire ? b.Duration * 3.6f : b.Duration * 1.35f;
             if (b.Go == null || b.Age > longest)
             {
                 Kill(b);
@@ -284,7 +441,21 @@ public class TagExplosions : MonoBehaviour
                 p.Pos += p.Vel * dt;
             }
 
-            if (b.Light != null)
+            if (b.Fire)
+            {
+                UpdatePuffs(b.Fireballs, dt, b.Age);
+                UpdatePuffs(b.Smoke, dt, b.Age);
+            }
+
+            if (b.Light != null && b.Fire)
+            {
+                // bright, flickering fire light that dies down with the fireball
+                float lt = b.Age / (b.Duration * 0.8f);
+                float flicker = 0.8f + 0.2f * Mathf.PerlinNoise(b.Age * 18f, 0.37f) + 0.15f * Mathf.Sin(b.Age * 53f);
+                b.Light.intensity = lt >= 1f ? 0f : Mathf.Clamp(S?.TagFXIntensity ?? 1f, 0f, 5f) * 10f * Mathf.Pow(1f - lt, 1.6f) * Mathf.Clamp01(b.Age * 40f) * flicker;
+                b.Light.color = Color.Lerp(new Color(1f, 0.8f, 0.5f), new Color(1f, 0.35f, 0.1f), Mathf.Clamp01(lt * 1.5f));
+            }
+            else if (b.Light != null)
             {
                 float lt = b.Age / (b.Duration * 0.6f);
                 b.Light.intensity = lt >= 1f ? 0f : Mathf.Clamp(S?.TagFXIntensity ?? 1f, 0f, 5f) * 6f * Mathf.Pow(1f - lt, 2f) * Mathf.Clamp01(b.Age * 30f);
@@ -294,8 +465,22 @@ public class TagExplosions : MonoBehaviour
         }
     }
 
+    private static void UpdatePuffs(Puff[] puffs, float dt, float burstAge)
+    {
+        for (int k = 0; k < puffs.Length; k++)
+        {
+            ref Puff p = ref puffs[k];
+            if (burstAge < p.Delay) continue;
+            p.Age += dt;
+            p.Vel *= Mathf.Exp(-p.Drag * dt);
+            p.Vel += Vector3.up * p.Rise * dt;            // hot gas / smoke rises
+            p.Pos += p.Vel * dt;
+        }
+    }
+
     private void Kill(Burst b)
     {
+        if (b.SmokeMesh != null) Destroy(b.SmokeMesh);
         if (b.Go != null) Destroy(b.Go);
         if (b.Mesh != null) Destroy(b.Mesh);
         _bursts.Remove(b);
@@ -321,6 +506,29 @@ public class TagExplosions : MonoBehaviour
             float cr = Mathf.Lerp(0.35f, 0.9f, EaseOut(ct)) * b.Size;
             float ca = (1f - ct) * 0.9f;
             if (ca > 0.001f) Star(Vector3.zero, cr, b.Primary, ca, false);
+        }
+
+        // Explosion: flash + fireballs (glowing, added to the main mesh)
+        if (b.Fire)
+        {
+            if (b.Flash)
+            {
+                float ft = Mathf.Clamp01(b.Age / (b.Duration * 0.1f));
+                float fa = (1f - ft) * (1f - ft);
+                if (fa > 0.001f) Star(Vector3.zero, Mathf.Lerp(0.6f, 2.2f, EaseOut(ft)) * b.Size, FireHot, fa * 1.6f, false);
+            }
+            for (int k = 0; k < b.Fireballs.Length; k++)
+            {
+                Puff p = b.Fireballs[k];
+                if (b.Age < p.Delay || p.Age > p.Life) continue;
+                float lt = p.Age / p.Life;
+                float r = p.Size + p.Grow * EaseOut(lt);
+                float a = Mathf.Clamp01(p.Age * 30f) * Mathf.Pow(1f - lt, 1.3f);
+                // hot core fades to embers; brighter in the middle of the ball
+                Color col = FireColor(lt);
+                Star(p.Pos - o, r, col, a * 0.9f, false);
+                Star(p.Pos - o, r * 0.55f, Color.Lerp(FireHot, col, 0.5f), a * 0.6f * (1f - lt), false);
+            }
         }
 
         // Shockwave rings
@@ -373,6 +581,8 @@ public class TagExplosions : MonoBehaviour
         mpb.SetVector("_Color", new Vector4(K * I, K * I, K * I, 1f / K));
         mr.SetPropertyBlock(mpb);
 
+        if (b.Fire) BuildSmoke(b);
+
         // Not in the VR headset unless asked: draw only into the MonkeFrames camera.
         bool inVR = S?.TagFXInVR ?? false;
         mr.enabled = inVR;
@@ -393,6 +603,56 @@ public class TagExplosions : MonoBehaviour
                 Graphics.RenderMesh(rp, m, 0, b.Go.transform.localToWorldMatrix);
             }
         }
+    }
+
+    /// <summary>Explosion smoke: its own mesh, drawn as plain (not glowing) soft puffs so it darkens the view.</summary>
+    private void BuildSmoke(Burst b)
+    {
+        _v.Clear(); _uv.Clear(); _c.Clear(); _t.Clear();
+        Vector3 o = b.Center;
+        for (int k = 0; k < b.Smoke.Length; k++)
+        {
+            Puff p = b.Smoke[k];
+            if (b.Age < p.Delay || p.Age > p.Life) continue;
+            float lt = p.Age / p.Life;
+            float r = p.Size + p.Grow * EaseOut(lt);
+            float a = Mathf.Clamp01(lt * 8f) * Mathf.Pow(1f - lt, 1.5f) * 0.55f;
+            // lit orange from the fire below at first, then plain dark grey smoke
+            Color col = Color.Lerp(new Color(0.45f, 0.2f, 0.07f), new Color(0.13f, 0.12f, 0.115f), Mathf.Clamp01(lt * 3f));
+            Star(p.Pos - o, r, col, a, false);
+        }
+        Mesh m = b.SmokeMesh;
+        m.Clear();
+        if (_v.Count == 0 || _v.Count > 65000) return;
+        m.SetVertices(_v);
+        m.SetUVs(0, _uv);
+        m.SetColors(_c);
+        m.SetTriangles(_t, 0, false);
+        m.bounds = new Bounds(Vector3.zero, Vector3.one * 20f * b.Size);
+
+        MeshRenderer mr = b.SmokeGo.GetComponent<MeshRenderer>();
+        var mpb = new MaterialPropertyBlock();
+        mpb.SetVector("_Color", new Vector4(1f, 1f, 1f, 1f));
+        mr.SetPropertyBlock(mpb);
+        bool inVR = S?.TagFXInVR ?? false;
+        mr.enabled = inVR;
+        if (!inVR)
+        {
+            Camera cam = CameraManager.Instance != null ? CameraManager.Instance.Camera : null;
+            if (cam != null)
+            {
+                var rp = new RenderParams(_mat)
+                {
+                    camera = cam,
+                    matProps = mpb,
+                    shadowCastingMode = ShadowCastingMode.Off,
+                    receiveShadows = false,
+                    worldBounds = new Bounds(b.Center, Vector3.one * 20f * b.Size),
+                };
+                Graphics.RenderMesh(rp, m, 0, b.SmokeGo.transform.localToWorldMatrix);
+            }
+        }
+        _v.Clear(); _uv.Clear(); _c.Clear(); _t.Clear();
     }
 
     private void Star(Vector3 c, float r, Color col, float a, bool ring)
@@ -501,6 +761,55 @@ public class TagExplosions : MonoBehaviour
         return _boom;
     }
 
+    private AudioClip _blast;
+
+    /// <summary>An explosion: a sharp crack, a deep boom that rolls into a rumble, and debris crackling down.</summary>
+    private AudioClip Blast()
+    {
+        if (_blast != null) return _blast;
+        const int rate = 44100;
+        const float len = 3.2f;
+        int n = (int)(rate * len);
+        float[] d = new float[n];
+        System.Random rnd = new System.Random(11);
+        float phase = 0f, lp1 = 0f, lp2 = 0f, hpPrev = 0f, hpOut = 0f, crackle = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = i / (float)rate;
+            float white = (float)(rnd.NextDouble() * 2.0 - 1.0);
+
+            // crack: a very short bright noise burst (high-passed)
+            hpOut = 0.92f * (hpOut + white - hpPrev); hpPrev = white;
+            float crack = hpOut * Mathf.Exp(-t * 60f) * 1.2f;
+
+            // boom: a low thump sweeping down, with a long tail
+            float f = Mathf.Lerp(28f, 95f, Mathf.Exp(-t * 7f));
+            phase += 2f * Mathf.PI * f / rate;
+            float boom = Mathf.Sin(phase) * Mathf.Exp(-t * 2.2f) * Mathf.Clamp01(t * 300f);
+
+            // rumble: low-passed noise rolling on (two poles, for a deep, soft roar)
+            float cut = Mathf.Lerp(0.004f, 0.08f, Mathf.Exp(-t * 3f));
+            lp1 += (white - lp1) * cut;
+            lp2 += (lp1 - lp2) * cut;
+            float rumble = lp2 * 9f * Mathf.Exp(-t * 1.4f) * Mathf.Clamp01(t * 60f);
+
+            // debris: random crackles and small pops thinning out as things fall back down
+            float pops = 0f;
+            if (t > 0.08f && rnd.NextDouble() < 0.0016 * Mathf.Exp(-t * 1.2f)) crackle = 1f;
+            crackle *= 0.9965f;
+            pops = crackle * white * 0.35f;
+
+            float x = crack + boom * 0.95f + rumble + pops;
+            d[i] = (float)System.Math.Tanh(x * 1.6f);          // a little saturation: sounds bigger
+        }
+        float peak = 0.0001f;
+        foreach (float v in d) peak = Mathf.Max(peak, Mathf.Abs(v));
+        for (int i = 0; i < n; i++) d[i] = d[i] / peak * 0.95f;
+        _blast = AudioClip.Create("MonkeFrames Tag Explosion", n, 1, rate, false);
+        _blast.SetData(d, 0);
+        return _blast;
+    }
+
     private void OnDestroy()
     {
         foreach (Burst b in _bursts.ToArray()) Kill(b);
@@ -527,9 +836,19 @@ public static class TagEffectSettings
             return y + 40;
         }
 
+        GUI.Label(new Rect(x, y, 90, 26), "Style");
+        int style = Widgets.Segmented("tfx.style", new Rect(x + 90, y, w - 90, 26), s.TagFXStyle, ["Neon", "Explosion"]);
+        if (style >= 0 && style != s.TagFXStyle)
+        {
+            s.TagFXStyle = style;
+            if (style == 1) ApplyPreset(s, "Explosion");
+            TagExplosions.Instance?.Preview();
+        }
+        y += 32;
+
         // Presets + preview
-        string[] presets = ["Neon", "Rainbow", "Subtle", "Huge", "Fireworks"];
-        float pw = (w - 4 * 4) / presets.Length;
+        string[] presets = ["Neon", "Rainbow", "Subtle", "Huge", "Fireworks", "Explosion"];
+        float pw = (w - 4 * (presets.Length - 1)) / presets.Length;
         for (int i = 0; i < presets.Length; i++)
             if (GUI.Button(new Rect(x + i * (pw + 4), y, pw, 24), presets[i]))
             {
@@ -546,19 +865,22 @@ public static class TagEffectSettings
         if (who >= 0) s.TagFXWho = who;
         y += 32;
 
-        GUI.Label(new Rect(x, y, 90, 26), "Colour");
-        int cm = Widgets.Segmented("tfx.cm", new Rect(x + 90, y, w - 90, 26), s.TagFXColorMode, ["Gorilla colour", "Custom", "Rainbow"]);
-        if (cm >= 0) s.TagFXColorMode = cm;
-        y += 32;
-        if (s.TagFXColorMode == 1)
-            s.TagFXColor = ColorRow("tfx.c1", x, ref y, w, "Main", s.TagFXColor);
-        if (s.TagFXColorMode != 2)
-            s.TagFXColor2 = ColorRow("tfx.c2", x, ref y, w, "Accent", s.TagFXColor2);
+        if (s.TagFXStyle == 0)
+        {
+            GUI.Label(new Rect(x, y, 90, 26), "Colour");
+            int cm = Widgets.Segmented("tfx.cm", new Rect(x + 90, y, w - 90, 26), s.TagFXColorMode, ["Gorilla colour", "Custom", "Rainbow"]);
+            if (cm >= 0) s.TagFXColorMode = cm;
+            y += 32;
+            if (s.TagFXColorMode == 1)
+                s.TagFXColor = ColorRow("tfx.c1", x, ref y, w, "Main", s.TagFXColor);
+            if (s.TagFXColorMode != 2)
+                s.TagFXColor2 = ColorRow("tfx.c2", x, ref y, w, "Accent", s.TagFXColor2);
+        }
 
         s.TagFXSize = Row("tfx.size", x, ref y, w, "Size", s.TagFXSize, 0.2f, 3f, $"{s.TagFXSize:0.0}x");
         s.TagFXDuration = Row("tfx.dur", x, ref y, w, "Duration", s.TagFXDuration, 0.3f, 3f, $"{s.TagFXDuration:0.0} s");
         s.TagFXIntensity = Row("tfx.int", x, ref y, w, "Glow", s.TagFXIntensity, 0f, 4f, $"{s.TagFXIntensity * 100f / 1.5f:0}%");
-        s.TagFXSparks = Mathf.RoundToInt(Row("tfx.sp", x, ref y, w, "Sparks", s.TagFXSparks, 0f, 300f, s.TagFXSparks.ToString()));
+        s.TagFXSparks = Mathf.RoundToInt(Row("tfx.sp", x, ref y, w, s.TagFXStyle == 1 ? "Debris" : "Sparks", s.TagFXSparks, 0f, 300f, s.TagFXSparks.ToString()));
         s.TagFXSparkSpeed = Row("tfx.sps", x, ref y, w, "Spark speed", s.TagFXSparkSpeed, 0f, 3f, $"{s.TagFXSparkSpeed:0.0}x");
         s.TagFXGravity = Row("tfx.g", x, ref y, w, "Gravity", s.TagFXGravity, 0f, 2f, $"{s.TagFXGravity * 100f:0}%");
         s.TagFXRings = Mathf.RoundToInt(Row("tfx.r", x, ref y, w, "Rings", s.TagFXRings, 0f, 4f, s.TagFXRings.ToString()));
@@ -569,7 +891,8 @@ public static class TagEffectSettings
         s.TagFXFlash = Widgets.Switch("tfx.flash", new Rect(x, y, w / 2f, 26), s.TagFXFlash, "Flash", "Bright white flash at the start.");
         s.TagFXLight = Widgets.Switch("tfx.light", new Rect(x + w / 2f, y, w / 2f, 26), s.TagFXLight, "Light up area", "Lights up nearby walls and gorillas in the explosion's colour.");
         y += 32;
-        s.TagFXSound = Widgets.Switch("tfx.sound", new Rect(x, y, w / 2f, 26), s.TagFXSound, "Sound", "A deep neon \"whoomp\".");
+        s.TagFXSound = Widgets.Switch("tfx.sound", new Rect(x, y, w / 2f, 26), s.TagFXSound, "Sound",
+            s.TagFXStyle == 1 ? "An explosion: a sharp crack, a deep boom and rumble, and debris crackling down." : "A deep neon \"whoomp\".");
         GUI.enabled = s.TagFXSound;
         s.TagFXVolume = Widgets.Slider("tfx.vol", new Rect(x + w / 2f, y, w / 2f - 50, 26), s.TagFXVolume, 0f, 1f);
         GUI.Label(new Rect(x + w - 46, y, 46, 26), $"{s.TagFXVolume * 100f:0}%", Theme.LabelRight);
@@ -579,8 +902,13 @@ public static class TagEffectSettings
 
     private static void ApplyPreset(Settings s, string name)
     {
+        s.TagFXStyle = name == "Explosion" ? 1 : 0;
         switch (name)
         {
+            case "Explosion":
+                s.TagFXSize = 1.3f; s.TagFXDuration = 1.3f; s.TagFXIntensity = 1.8f; s.TagFXSparks = 120; s.TagFXSparkSpeed = 1.1f;
+                s.TagFXGravity = 1f; s.TagFXRings = 1; s.TagFXFlash = true; s.TagFXLight = true; s.TagFXSound = true;
+                break;
             case "Neon":
                 s.TagFXColorMode = 0; s.TagFXColor2 = new Color(0.3f, 0.95f, 1f);
                 s.TagFXSize = 1f; s.TagFXDuration = 1.2f; s.TagFXIntensity = 1.5f; s.TagFXSparks = 90; s.TagFXSparkSpeed = 1f;

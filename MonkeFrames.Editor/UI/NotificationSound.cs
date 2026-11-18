@@ -4,7 +4,7 @@ using UnityEngine;
 namespace MonkeFrames.Editor.UI;
 
 /// <summary>
-/// Soft two-note chime played when a notification (status toast) appears.
+/// A short, soft tick played when a notification (status toast) appears.
 /// The sound is synthesised at startup, so no audio file needs to ship with the mod.
 /// </summary>
 public static class NotificationSound
@@ -56,21 +56,20 @@ public static class NotificationSound
             _clip = CreateChime();
     }
 
-    /// <summary>Two soft bell-like notes (C6 then G6) with quick attack and gentle decay.</summary>
+    /// <summary>One soft, short, rounded tick (a pure tone that dies away fast): there but barely noticed.</summary>
     private static AudioClip CreateChime()
     {
-        const float length = 0.55f;
+        const float length = 0.16f;
         int count = (int)(SampleRate * length);
         float[] data = new float[count];
 
-        AddNote(data, 1046.50f, 0.00f, 0.13f, 0.9f);   // C6
-        AddNote(data, 1567.98f, 0.085f, 0.16f, 0.8f);  // G6
+        AddNote(data, 880f, 0.00f, 0.035f, 1f);   // A5, ~35 ms decay
 
-        // Normalise to a comfortable peak.
+        // Normalise to a quiet peak.
         float peak = 0.0001f;
         foreach (float v in data)
             peak = Mathf.Max(peak, Mathf.Abs(v));
-        float gain = 0.8f / peak;
+        float gain = 0.42f / peak;
         for (int i = 0; i < count; i++)
             data[i] *= gain;
 
@@ -85,12 +84,12 @@ public static class NotificationSound
         for (int i = begin; i < data.Length; i++)
         {
             float t = (i - begin) / (float)SampleRate;
-            float attack = Mathf.Clamp01(t / 0.004f);            // 4 ms fade-in, no click
+            float attack = Mathf.Clamp01(t / 0.006f);            // 6 ms fade-in, no click
             float env = attack * Mathf.Exp(-t / decay);
             float w = 2f * Mathf.PI * freq * t;
 
-            // Fundamental plus a couple of soft overtones for a bell-ish tone.
-            float v = Mathf.Sin(w) + 0.22f * Mathf.Sin(2f * w) + 0.06f * Mathf.Sin(3.01f * w);
+            // Just the tone and a whisper of its octave: clean, not bell-like.
+            float v = Mathf.Sin(w) + 0.05f * Mathf.Sin(2f * w);
             data[i] += v * env * amp;
         }
     }

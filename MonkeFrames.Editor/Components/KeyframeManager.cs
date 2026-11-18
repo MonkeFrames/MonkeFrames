@@ -4,8 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Classes;
+using MonkeFrames.Editor.Replays;
 using MonkeFrames.Editor.Utilities;
-using MonkeFrames.Extensions;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Keyframe = MonkeFrames.Compiler.Models.Keyframe;
@@ -19,98 +19,36 @@ public class KeyframeManager : MonoBehaviour
 
     public Dictionary<Keyframe, GameObject> Objects = new Dictionary<Keyframe, GameObject>();
 
-    private readonly KeyframeHistory history = new();
-    private Project historyProject;
-    private Replays.ReplayClip historyClip;
-    private int historyRevision;
-    private string editGroup;
-    private Keyframe? clipboard;
-    public bool CanEdit => Project != null && !IsCompiling && CameraManager.Instance != null
-        && !CameraManager.Instance.InPlayback && !CameraManager.Instance.Exporting;
+    public bool IsCompiling;
 
-    private void CheckHistoryContext()
-    {
-        var rm = Replays.ReplayManager.Instance;
-        var clip = rm != null && rm.Viewing ? rm.Clip : null;
-        if (ReferenceEquals(historyProject, Project) && ReferenceEquals(historyClip, clip)) return;
-        history.Clear(); editGroup = null;
-        historyProject = Project; historyClip = clip;
-    }
-    private KeyframeHistory.State CaptureState() => new(Project.Keyframes, UIManager.Instance.Selection, historyClip?.InPoint);
-    public void RecordUndo()
-    {
-        CheckHistoryContext(); history.Record(CaptureState());
-        historyRevision++; editGroup = null;
-        Project.IsCompiled = false;
-    }
-    internal KeyframeHistory.State BeginPropertyEdit()
-    {
-        if (!CanEdit || Event.current.type is EventType.Layout or EventType.Repaint or EventType.Used) return null;
-        CheckHistoryContext();
-        var state = CaptureState(); state.Revision = historyRevision; return state;
-    }
-    internal void EndPropertyEdit(KeyframeHistory.State before, string group)
-    {
-        if (before == null || before.Revision != historyRevision || before.Matches(Project.Keyframes, historyClip?.InPoint)) return;
-        string gesture = $"{group}:{GUIUtility.hotControl}:{GUIUtility.keyboardControl}";
-        if (editGroup != gesture || (GUIUtility.hotControl == 0 && GUIUtility.keyboardControl == 0))
-        { history.Record(before); historyRevision++; }
-        editGroup = gesture;
-        Project.IsCompiled = false;
-        if (historyClip != null) historyClip.Dirty = true;
-    }
-    public void Undo() => RestoreHistory(false);
-    public void Redo() => RestoreHistory(true);
-    private void RestoreHistory(bool redo)
-    {
-        if (!CanEdit) return;
-        CheckHistoryContext();
-        var state = redo ? history.Redo(CaptureState()) : history.Undo(CaptureState());
-        if (state == null) return;
-        historyRevision++; editGroup = null;
-        Project.Keyframes = new List<Keyframe>(state.Keys);
-        Project.IsCompiled = false;
-        UIManager.Instance.Selection = Mathf.Clamp(state.Selection, -1, Project.Keyframes.Count - 1);
-        if (historyClip != null && state.ReplayInPoint.HasValue)
-        { historyClip.InPoint = state.ReplayInPoint.Value; historyClip.Dirty = true; }
-        RefreshOrbs();
-        UIManager.Instance.Status = redo ? "Redid keyframe edit." : "Undid keyframe edit.";
-    }
-    private bool ValidSelection => Project != null && UIManager.Instance.Selection >= 0
-        && UIManager.Instance.Selection < Project.Keyframes.Count;
-    public void CopySelection()
-    {
-        if (!ValidSelection) return;
-        clipboard = Project.Keyframes[UIManager.Instance.Selection];
-        UIManager.Instance.Status = "Copied keyframe.";
-    }
-    public void CutSelection()
-    {
-        if (!CanEdit || !ValidSelection) return;
-        CopySelection();
-        var studio = Replays.ReplayStudio.Instance;
-        if (studio != null && studio.Active) studio.DeleteKeyframe(UIManager.Instance.Selection);
-        else DeleteKeyframe(UIManager.Instance.Selection);
-    }
-    public void Paste()
-    {
-        if (!CanEdit || !clipboard.HasValue) return;
-        var keyframe = clipboard.Value;
-        keyframe.GUID = Guid.NewGuid().ToString(); keyframe.Compiled = false;
-        var studio = Replays.ReplayStudio.Instance;
-        if (studio != null && studio.Active) { studio.InsertPastedKeyframe(keyframe); return; }
-        RecordUndo();
-        int index = ValidSelection ? UIManager.Instance.Selection + 1 : Project.Keyframes.Count;
-        Project.Keyframes.Insert(index, keyframe);
-        UIManager.Instance.Selection = index;
-        RefreshOrbs();
-        UIManager.Instance.Status = "Pasted keyframe.";
-    }
+    // Undo / redo
+    private readonly KeyframeHistory _history = new KeyframeHistory();
+    private Project _historyProject;
+    private ReplayClip _historyClip;
+    private int _historyRevision;
+    private string _editGroup;
+    private bool _batching;
+
+    // Cut / copy / paste
+    private List<Keyframe> _clipboard;
+
+    // Extra keyframes selected with Shift / Ctrl+click in the Keyframe Editor (by GUID, so they survive list
+    // changes). UIManager.Selection stays the primary selection.
+    private readonly HashSet<string> _extraSelection = new();
+    private string _selectionAnchor;
 
     public KeyframeManager()
     {
         Instance = this;
     }
+
+    /// <summary>Keyframes can be changed right now (not compiling, playing back or exporting).</summary>
+    public bool CanEdit => Project != null && !IsCompiling && CameraManager.Instance != null
+        && !CameraManager.Instance.InPlayback && !CameraManager.Instance.Exporting;
+
+    private bool ValidSelection => Project != null && UIManager.Instance.Selection >= 0 && UIManager.Instance.Selection < Project.Keyframes.Count;
+
+    private static bool InStudio => ReplayStudio.Instance != null && ReplayStudio.Instance.Active;
 
     public GameObject CreateOrb(string name)
     {
@@ -159,16 +97,26 @@ public class KeyframeManager : MonoBehaviour
 
     public void Update()
     {
-        if (!CanEdit || Keyboard.current == null) return;
-        // Ctrl+X/V are clipboard actions, never the unmodified replace/add shortcuts.
-        if (Keyboard.current.ctrlKey.isPressed || Keyboard.current.leftMetaKey.isPressed || Keyboard.current.rightMetaKey.isPressed) return;
+        // Drop the history as soon as the project or the viewed replay changes.
+        CheckHistoryContext();
+
+        if (!CanEdit || Keyboard.current == null)
+            return;
+
+        // Ctrl+V / Ctrl+X... are Edit menu shortcuts, not "add" / "replace keyframe".
+        if (Keyboard.current.ctrlKey.isPressed || Keyboard.current.leftMetaKey.isPressed || Keyboard.current.rightMetaKey.isPressed)
+            return;
 
         // Don't treat typing in a text field (keyframe values, room codes...) as shortcuts.
         if (GUIUtility.keyboardControl != 0)
             return;
 
+        // The Advanced Keyframe Editor has its own keys (Delete, Ctrl+V...) while the mouse is over it.
+        if (Windows.AdvancedKeyframeEditor.CapturingKeys)
+            return;
+
         // In Replay Studio, keyframes are placed at the replay playhead and deleting keeps timing.
-        var studio = Replays.ReplayStudio.Instance;
+        var studio = ReplayStudio.Instance;
         bool inStudio = studio != null && studio.Active;
 
         if (Keyboard.current.vKey.wasPressedThisFrame)
@@ -190,11 +138,295 @@ public class KeyframeManager : MonoBehaviour
             CreateKeyframe(replaceKeyframeIdx: UIManager.Instance.Selection);
 
         if (Keyboard.current.deleteKey.wasPressedThisFrame && UIManager.Instance.Selection != -1)
+            DeleteSelection();
+    }
+
+    // =====================================================================
+    //  Undo / redo
+    // =====================================================================
+
+    /// <summary>Clears the history when the project or the replay being edited changes.</summary>
+    private void CheckHistoryContext()
+    {
+        ReplayManager rm = ReplayManager.Instance;
+        ReplayClip clip = rm != null && rm.Viewing ? rm.Clip : null;
+        if (_historyProject == Project && _historyClip == clip)
+            return;
+
+        _history.Clear();
+        _editGroup = null;
+        _historyProject = Project;
+        _historyClip = clip;
+    }
+
+    private KeyframeHistory.State CaptureState()
+    {
+        ValidateSelection();
+        return new KeyframeHistory.State(Project.Keyframes, UIManager.Instance.Selection, _extraSelection.ToArray(), _historyClip?.InPoint);
+    }
+
+    /// <summary>Saves the keyframes as an undo step. Call right before changing them.</summary>
+    public void RecordUndo()
+    {
+        if (Project == null || _batching)
+            return;
+
+        CheckHistoryContext();
+        _history.Record(CaptureState());
+        _historyRevision++;
+        _editGroup = null;
+        Project.IsCompiled = false;
+    }
+
+    /// <summary>
+    /// Call before GUI that edits keyframe properties, then <see cref="EndPropertyEdit"/> after it. If anything
+    /// changed, one undo step is saved; a continuous drag or typing in one field stays one step.
+    /// </summary>
+    internal KeyframeHistory.State BeginPropertyEdit()
+    {
+        Event e = Event.current;
+        if (!CanEdit || e == null || e.type == EventType.Repaint || e.type == EventType.Layout || e.type == EventType.Used)
+            return null;
+
+        CheckHistoryContext();
+        KeyframeHistory.State state = CaptureState();
+        state.Revision = _historyRevision;
+        return state;
+    }
+
+    /// <param name="group">Names what's being edited (e.g. "keyframe:" + GUID), so edits to another keyframe start a new step.</param>
+    internal void EndPropertyEdit(KeyframeHistory.State before, string group)
+    {
+        // Something inside already saved its own step (Delete, Apply to all...), or nothing changed.
+        if (before == null || Project == null || before.Revision != _historyRevision || before.Matches(Project.Keyframes, _historyClip?.InPoint))
+            return;
+
+        string key = $"{group}:{GUIUtility.hotControl}:{GUIUtility.keyboardControl}";
+        if (_editGroup != key || (GUIUtility.hotControl == 0 && GUIUtility.keyboardControl == 0))
         {
-            if (inStudio) studio.DeleteKeyframe(UIManager.Instance.Selection);
-            else DeleteKeyframe(UIManager.Instance.Selection);
+            _history.Record(before);
+            _historyRevision++;
+        }
+        _editGroup = key;
+        Project.IsCompiled = false;
+        if (_historyClip != null)
+            _historyClip.Dirty = true;
+    }
+
+    public void Undo() => RestoreHistory(redo: false);
+
+    public void Redo() => RestoreHistory(redo: true);
+
+    private void RestoreHistory(bool redo)
+    {
+        // The Advanced Keyframe Editor has its own undo while the mouse is over it.
+        if (Windows.AdvancedKeyframeEditor.CapturingKeys || !CanEdit)
+            return;
+
+        CheckHistoryContext();
+        KeyframeHistory.State state = redo ? _history.Redo(CaptureState()) : _history.Undo(CaptureState());
+        if (state == null)
+        {
+            UIManager.Instance.Status = redo ? "Nothing to redo." : "Nothing to undo.";
+            return;
+        }
+
+        _historyRevision++;
+        _editGroup = null;
+        GUIUtility.keyboardControl = 0;   // a focused text field would keep showing the old value
+
+        Project.Keyframes = new List<Keyframe>(state.Keys);
+        Project.IsCompiled = false;
+        UIManager.Instance.Selection = Mathf.Clamp(state.Selection, -1, Project.Keyframes.Count - 1);
+        _extraSelection.Clear();
+        foreach (string guid in state.ExtraSelection) _extraSelection.Add(guid);
+        _selectionAnchor = PrimaryGuid();
+        ValidateSelection();
+
+        if (_historyClip != null && state.ReplayInPoint.HasValue)
+        {
+            _historyClip.InPoint = state.ReplayInPoint.Value;
+            _historyClip.Dirty = true;
+        }
+
+        RefreshOrbs();
+        UIManager.Instance.Status = redo ? "Redid keyframe edit." : "Undid keyframe edit.";
+    }
+
+    // =====================================================================
+    //  Cut / copy / paste
+    // =====================================================================
+
+    public void CopySelection()
+    {
+        if (Windows.AdvancedKeyframeEditor.CapturingKeys || !ValidSelection)
+            return;
+
+        _clipboard = SelectedIndices().Select(i => Project.Keyframes[i]).ToList();
+        UIManager.Instance.Status = _clipboard.Count == 1 ? "Copied keyframe." : $"Copied {_clipboard.Count} keyframes.";
+    }
+
+    public void CutSelection()
+    {
+        if (Windows.AdvancedKeyframeEditor.CapturingKeys || !CanEdit || !ValidSelection)
+            return;
+
+        CopySelection();
+        DeleteSelection();
+    }
+
+    public void Paste()
+    {
+        if (Windows.AdvancedKeyframeEditor.CapturingKeys || !CanEdit || _clipboard == null || _clipboard.Count == 0)
+            return;
+
+        List<Keyframe> pasted = _clipboard.Select(k =>
+        {
+            k.GUID = Guid.NewGuid().ToString();
+            k.Compiled = false;
+            return k;
+        }).ToList();
+
+        RecordUndo();
+        _batching = true;   // the whole paste is one undo step
+        try
+        {
+            if (InStudio)
+            {
+                // Each one goes in after the one before it (Replay Studio keeps the timing).
+                foreach (Keyframe k in pasted)
+                    ReplayStudio.Instance.InsertPastedKeyframe(k);
+            }
+            else
+            {
+                int insertAt = ValidSelection ? UIManager.Instance.Selection + 1 : Project.Keyframes.Count;
+                Project.Keyframes.InsertRange(insertAt, pasted);
+                UIManager.Instance.Selection = insertAt + pasted.Count - 1;
+                RefreshOrbs();
+            }
+        }
+        finally
+        {
+            _batching = false;
+        }
+
+        // Select everything that was pasted (the last one is the primary selection).
+        _extraSelection.Clear();
+        for (int i = 0; i < pasted.Count - 1; i++) _extraSelection.Add(pasted[i].GUID);
+        _selectionAnchor = PrimaryGuid();
+
+        UIManager.Instance.Status = pasted.Count == 1 ? "Pasted keyframe." : $"Pasted {pasted.Count} keyframes.";
+    }
+
+    // =====================================================================
+    //  Multi-selection
+    // =====================================================================
+
+    private string PrimaryGuid() => ValidSelection ? Project.Keyframes[UIManager.Instance.Selection].GUID : null;
+
+    /// <summary>Drops extra selections that no longer exist, or that belong to an old primary selection
+    /// (another window selected something else).</summary>
+    private void ValidateSelection()
+    {
+        if (_extraSelection.Count == 0)
+            return;
+
+        string primary = PrimaryGuid();
+        if (primary == null || primary != _selectionAnchor)
+        {
+            _extraSelection.Clear();
+            return;
+        }
+
+        HashSet<string> present = new HashSet<string>(Project.Keyframes.Select(k => k.GUID));
+        _extraSelection.RemoveWhere(g => g == primary || !present.Contains(g));
+    }
+
+    /// <summary>Number of selected keyframes (primary plus extras).</summary>
+    public int SelectionCount
+    {
+        get
+        {
+            ValidateSelection();
+            return ValidSelection ? 1 + _extraSelection.Count : 0;
         }
     }
+
+    public bool IsSelected(int index)
+    {
+        if (Project == null || index < 0 || index >= Project.Keyframes.Count)
+            return false;
+        if (index == UIManager.Instance.Selection)
+            return true;
+        ValidateSelection();
+        return _extraSelection.Contains(Project.Keyframes[index].GUID);
+    }
+
+    /// <summary>Indices of every selected keyframe, in list order.</summary>
+    public List<int> SelectedIndices()
+    {
+        List<int> result = new List<int>();
+        if (!ValidSelection)
+            return result;
+
+        ValidateSelection();
+        for (int i = 0; i < Project.Keyframes.Count; i++)
+            if (i == UIManager.Instance.Selection || _extraSelection.Contains(Project.Keyframes[i].GUID))
+                result.Add(i);
+        return result;
+    }
+
+    /// <summary>Select <paramref name="primary"/> plus <paramref name="extras"/> (indices).</summary>
+    public void SetSelection(int primary, IEnumerable<int> extras)
+    {
+        UIManager.Instance.Selection = primary;
+        _extraSelection.Clear();
+        if (Project != null && extras != null)
+            foreach (int i in extras)
+                if (i >= 0 && i < Project.Keyframes.Count && i != primary)
+                    _extraSelection.Add(Project.Keyframes[i].GUID);
+        _selectionAnchor = PrimaryGuid();
+    }
+
+    public void ClearExtraSelection() => _extraSelection.Clear();
+
+    /// <summary>Deletes every selected keyframe as one undo step (Replay Studio keeps the others' timing).</summary>
+    public void DeleteSelection()
+    {
+        if (!CanEdit || !ValidSelection)
+            return;
+
+        List<int> indices = SelectedIndices();
+        if (indices.Count == 1)
+        {
+            if (InStudio) ReplayStudio.Instance.DeleteKeyframe(indices[0]);
+            else DeleteKeyframe(indices[0]);
+            return;
+        }
+
+        RecordUndo();
+        _batching = true;
+        try
+        {
+            for (int n = indices.Count - 1; n >= 0; n--)
+            {
+                if (InStudio) ReplayStudio.Instance.DeleteKeyframe(indices[n]);
+                else DeleteKeyframe(indices[n]);
+            }
+        }
+        finally
+        {
+            _batching = false;
+        }
+
+        _extraSelection.Clear();
+        UIManager.Instance.Selection = Mathf.Min(indices[0], Project.Keyframes.Count - 1);
+        UIManager.Instance.Status = $"Deleted {indices.Count} keyframes.";
+    }
+
+    // =====================================================================
+    //  Keyframes
+    // =====================================================================
 
     /// <summary>Move the camera to a keyframe's position, rotation and FOV.</summary>
     public void GoToKeyframe(int index)
@@ -208,39 +440,91 @@ public class KeyframeManager : MonoBehaviour
         CameraManager.Instance.Position = k.Position;
         CameraManager.Instance.Rotation = k.QuatRotation;
         CameraManager.Instance.FieldOfView = k.FieldOfView;
+        PhotorealLink.KeyframeHour = k.TimeOfDay;
+    }
+
+    private Project _lastClosed;
+    private static string LastClosedPath => System.IO.Path.Combine(Utilities.SaveUtilities.ProjectDirectory, "_last closed project.frames");
+
+    /// <summary>Leave the current keyframe project: stops playback, keeps a backup (Reopen Last Closed brings it
+    /// back) and starts a fresh, empty project.</summary>
+    public void CloseProject()
+    {
+        CameraManager cm = CameraManager.Instance;
+        if (cm != null && cm.InPlayback) cm.StopPlayback();
+        Project old = Project;
+        if (old != null && old.Keyframes.Count > 0)
+        {
+            _lastClosed = old;
+            try
+            {
+                System.IO.Directory.CreateDirectory(Utilities.SaveUtilities.ProjectDirectory);
+                System.IO.File.WriteAllText(LastClosedPath, old.ToJson());
+            }
+            catch (Exception ex) { Console.WriteLine($"[MonkeFrames::KeyframeManager] Couldn't back up the closed project: {ex.Message}"); }
+        }
+        Project = new Project("new project", Constants.Exporter) { FPS = old != null ? old.FPS : 60 };
+        UIManager.Instance.Selection = -1;
+        _extraSelection.Clear();
+        CheckHistoryContext();
+        PhotorealLink.KeyframeHour = -1f;
+        if (cm != null) cm.Blur.Set(false, 0f);
+        RefreshOrbs();
+        UIManager.Instance.Status = old != null && old.Keyframes.Count > 0
+            ? $"Closed \"{old.Name}\". Project > Reopen Last Closed brings it back."
+            : "Started a new, empty project.";
+    }
+
+    /// <summary>Brings back the project closed last (this session, or the backup file).</summary>
+    public void ReopenLastClosed()
+    {
+        Project p = _lastClosed;
+        if (p == null)
+        {
+            try
+            {
+                if (System.IO.File.Exists(LastClosedPath))
+                    p = Project.FromJson(System.IO.File.ReadAllText(LastClosedPath));
+            }
+            catch { }
+        }
+        if (p == null) { UIManager.Instance.Status = "There's no closed project to reopen."; return; }
+        _lastClosed = null;
+        LoadProject(p);
+        UIManager.Instance.Status = $"Reopened \"{p.Name}\".";
     }
 
     public void LoadProject(Project p)
     {
         UIManager.Instance.Selection = -1;
+        _extraSelection.Clear();
         Project = p;
+        CheckHistoryContext();
         RefreshOrbs();
         ObjectManager.Instance?.SyncWithProject();
     }
 
-    public bool IsCompiling;
-
     public void StartBuild()
     {
         Task.Run(async () => {
-            ExtensionManager.CallMethod("OnCompilationStart", Project);
+            MonkeFrames.Extensions.ExtensionManager.CallMethod("OnCompilationStart", Project);
             IsCompiling = true;
             await Task.Delay(100); // give frame time to process
             await Project.Build();
             IsCompiling = false;
-            ExtensionManager.CallMethod("OnCompilationEnd", Project);
-        }); 
+            MonkeFrames.Extensions.ExtensionManager.CallMethod("OnCompilationEnd", Project);
+        });
     }
 
     public void StartBuildAndRun()
     {
         Task.Run(async () => {
-            ExtensionManager.CallMethod("OnCompilationStart");
+            MonkeFrames.Extensions.ExtensionManager.CallMethod("OnCompilationStart", Project);
             IsCompiling = true;
             await Task.Delay(100); // give frame time to process
             await Project.Build();
             IsCompiling = false;
-            ExtensionManager.CallMethod("OnCompilationEnd");
+            MonkeFrames.Extensions.ExtensionManager.CallMethod("OnCompilationEnd", Project);
             CameraManager.Instance.StartPlayback();
         });
     }
@@ -252,9 +536,11 @@ public class KeyframeManager : MonoBehaviour
 
     private Keyframe CreateKeyframeCore(int replaceKeyframeIdx, bool lookAtPlayer)
     {
-        if (!CanEdit) return default;
-        if (replaceKeyframeIdx < -1 || replaceKeyframeIdx >= Project.Keyframes.Count) return default;
+        if (!CanEdit || replaceKeyframeIdx < -1 || replaceKeyframeIdx >= Project.Keyframes.Count)
+            return default;
+
         RecordUndo();
+
         Keyframe k = new Keyframe();
 
         k.Position = CameraManager.Instance.Position;
@@ -290,7 +576,7 @@ public class KeyframeManager : MonoBehaviour
         }
 
         CreateOrb(k);
-        
+
         string posStr = $"Position: {UnityUtilities.Vector3ToString(k.Position)}";
         string rotStr = $"Rotation: {UnityUtilities.Vector3ToString(k.Rotation)}";
 
@@ -301,10 +587,9 @@ public class KeyframeManager : MonoBehaviour
 
     public void DeleteKeyframe(int index)
     {
-        if (Project == null || index < 0 || index >= Project.Keyframes.Count)
+        if (Project == null || index < 0 || index >= Project.Keyframes.Count || !CanEdit)
             return;
 
-        if (!CanEdit) return;
         RecordUndo();
         Keyframe keyframe = Project.Keyframes[index];
         if (Objects.TryGetValue(keyframe, out GameObject orb))

@@ -8,10 +8,10 @@
         <RuntimeIdentifier>win-x64</RuntimeIdentifier>
         
         <!-- add debug symbols for builds -->
-	      <DebugType Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">embedded</DebugType>
+	    <DebugType Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">embedded</DebugType>
 
         <!-- copy DLLs to output directory for copying -->
-	      <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+	    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 	</PropertyGroup>
 	
     <ItemGroup>
@@ -29,19 +29,19 @@
 
     <ItemGroup>
         <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.3">
-          <PrivateAssets>all</PrivateAssets>
-          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
 
-        <ProjectReference Include="../MonkeFrames.Compiler/MonkeFrames.Compiler.csproj">
-          <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
-          <IncludeAssets>all</IncludeAssets>
-        </ProjectReference>
+		<ProjectReference Include="../MonkeFrames.Compiler/MonkeFrames.Compiler.csproj">
+			<ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+			<IncludeAssets>all</IncludeAssets>
+		</ProjectReference>
 
-        <ProjectReference Include="../MonkeFrames.Extensions/MonkeFrames.Extensions.csproj">
-          <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
-          <IncludeAssets>all</IncludeAssets>
-        </ProjectReference>
+		<ProjectReference Include="../MonkeFrames.Extensions/MonkeFrames.Extensions.csproj">
+			<ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+			<IncludeAssets>all</IncludeAssets>
+		</ProjectReference>
     </ItemGroup>
 
     <ItemGroup>
@@ -51,21 +51,30 @@
       <EmbeddedResource Include="Resources/MFintroLogo.png">
         <LogicalName>introLogo</LogicalName>
       </EmbeddedResource>
-	    <EmbeddedResource Include="Resources/MFCamera.obj">
-		    <LogicalName>spectatorCamObj</LogicalName>
-	    </EmbeddedResource>
-      <EmbeddedResource Include="Resources/MFCamera.png">
+      <EmbeddedResource Include="Resources/MFCamera.obj">
+        <LogicalName>spectatorCam</LogicalName>
+      </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFCamera_Albedo.png">
+        <LogicalName>camAlbedo</LogicalName>
+      </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFCamera_RGB.png">
+        <LogicalName>camRGB</LogicalName>
+      </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFCameraNew.obj">
+        <LogicalName>spectatorCamObj</LogicalName>
+      </EmbeddedResource>
+      <EmbeddedResource Include="Resources/MFCameraNew.png">
         <LogicalName>spectatorCamTex</LogicalName>
       </EmbeddedResource>
     </ItemGroup>
 
     <ItemGroup>
-      <Reference Include="BepInEx">
-        <HintPath>$(BepInExAssemblyPath)\BepInEx.dll</HintPath>
-      </Reference>
-      <Reference Include="0Harmony">
-        <HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
-      </Reference>
+		<Reference Include="BepInEx">
+			<HintPath>$(BepInExAssemblyPath)\BepInEx.dll</HintPath>
+		</Reference>
+		<Reference Include="0Harmony">
+			<HintPath>$(BepInExAssemblyPath)\0Harmony.dll</HintPath>
+		</Reference>
         <Reference Include="AA.Mothership">
           <HintPath>$(GameAssemblyPath)\AA.Mothership.dll</HintPath>
         </Reference>

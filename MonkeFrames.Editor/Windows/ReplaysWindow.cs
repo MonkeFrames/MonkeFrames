@@ -69,7 +69,7 @@ public class ReplaysWindow : IEditorWindow
             if (rm.RecordMyMic)
                 info += rm.MicFound ? " · your mic: on" : " · looking for your mic...";
             GUI.Label(new Rect(x + 38, y + 36, w - 50, 22), info, Theme.Muted);
-            GUI.Label(new Rect(x, y + 8, w - 12, 20), $"stops at {rm.MaxMinutes:0} min", Theme.MutedRight);
+            GUI.Label(new Rect(x, y + 8, w - 12, 20), rm.AutoRecording ? $"AUTO · new part every {rm.MaxMinutes:0} min" : $"stops at {rm.MaxMinutes:0} min", Theme.MutedRight);
             y += 72;
 
             if (GUI.Button(new Rect(x, y, w, 34), "Stop recording  (F9)", Theme.DangerButton))
@@ -86,6 +86,13 @@ public class ReplaysWindow : IEditorWindow
         Theme.Dot(new Vector2(x + 18, y + 17), 5f, Theme.Danger);
         GUI.enabled = true;
         y += 42;
+
+        bool autoWas = Classes.Settings.current.AutoRecordReplays;
+        Classes.Settings.current.AutoRecordReplays = Widgets.Switch("rp.auto", new Rect(x, y, w, 26), Classes.Settings.current.AutoRecordReplays,
+            "Auto-record lobbies", "Starts recording whenever you join a lobby and stops + saves when you leave. Long sessions are split into parts at the max length.");
+        if (autoWas != Classes.Settings.current.AutoRecordReplays)
+            Classes.Settings.Save();
+        y += 34;
 
         GUI.Label(new Rect(x, y, 100, 26), "Quality");
         int rate = Widgets.Segmented("rp.rate", new Rect(x + 100, y, w - 100, 26), System.Array.IndexOf(Rates, rm.RecordRate), RateLabels);
@@ -111,7 +118,7 @@ public class ReplaysWindow : IEditorWindow
             y += 10;
             GUI.Label(new Rect(x, y, 200, 20), "REPLAY", Theme.Header);
             GUI.Label(new Rect(x, y, w, 20),
-                $"{ReplayManager.FormatTime(clip.Length)} · {clip.Tracks.Count} gorilla{(clip.Tracks.Count == 1 ? "" : "s")} · {clip.Rate} fps", Theme.MutedRight);
+                $"{(string.IsNullOrEmpty(clip.GameMode) ? "" : clip.GameMode + " · ")}{ReplayManager.FormatTime(clip.Length)} · {clip.Tracks.Count} gorilla{(clip.Tracks.Count == 1 ? "" : "s")} · {clip.Rate} fps", Theme.MutedRight);
             y += 26;
 
             // Name + save
@@ -182,7 +189,7 @@ public class ReplaysWindow : IEditorWindow
             Widgets.Divider(x, y, w);
             y += 10;
             GUI.Label(new Rect(x, y, 200, 20), "GORILLAS", Theme.Header);
-            GUI.Label(new Rect(x, y, w, 20), "Film = point Other Cameras at them", Theme.MutedRight);
+            GUI.Label(new Rect(x, y, w, 20), "Film = point Sources at them", Theme.MutedRight);
             y += 26;
             y = DrawTracks(rm, clip, x, w, y);
 
@@ -296,6 +303,17 @@ public class ReplaysWindow : IEditorWindow
             float a = ToX(t.StartFrame / (float)clip.Rate), b = ToX(t.EndFrame / (float)clip.Rate);
             Color c = t.Color; c.a = t.Hidden ? 0.2f : 0.85f;
             Theme.Fill(new Rect(a, y + i * 4, Mathf.Max(2, b - a), 3), c, 1);
+
+            // While tagged / infected (or another game-mode look): marked over the lane.
+            if (Event.current.type == EventType.Repaint)
+                for (int k = 0; k < t.MatChanges.Count; k++)
+                {
+                    MatChange m = t.MatChanges[k];
+                    if (m.Index <= 0) continue;
+                    int endFrame = k + 1 < t.MatChanges.Count ? t.MatChanges[k + 1].Frame : t.FrameCount;
+                    float ta = ToX((t.StartFrame + m.Frame) / (float)clip.Rate), tb = ToX((t.StartFrame + endFrame) / (float)clip.Rate);
+                    Theme.Fill(new Rect(ta, y + i * 4 + 1, Mathf.Max(2, tb - ta), 1), Theme.Danger.WithAlpha(t.Hidden ? 0.3f : 1f), 0);
+                }
         }
         y += lanes * 4 + 6;
 
@@ -384,7 +402,7 @@ public class ReplaysWindow : IEditorWindow
         cm.SetTarget(t.Puppet);
         if (cm.Mode == CameraMode.Free)
             cm.SetMode(CameraMode.Orbit);
-        UIManager.Instance.OpenWindow("Other Cameras");
+        UIManager.Instance.OpenWindow("Sources");
     }
 
     private float DrawLibrary(ReplayManager rm, float x, float w, float y)
@@ -429,7 +447,7 @@ public class ReplaysWindow : IEditorWindow
             Theme.Fill(row, current ? Theme.Accent.WithAlpha(0.16f) : Theme.Surface, 6);
 
             Theme.DrawText(new Rect(row.x + 12, row.y + 3, row.width - 180, 22), c.Name, Theme.Label, Theme.Text);
-            string sub = $"{ReplayManager.FormatTime(c.Length)} · {c.TrackCount} gorilla{(c.TrackCount == 1 ? "" : "s")} · {c.Created:d MMM HH:mm}";
+            string sub = $"{(string.IsNullOrEmpty(c.GameMode) ? "" : c.GameMode + " · ")}{ReplayManager.FormatTime(c.Length)} · {c.TrackCount} gorilla{(c.TrackCount == 1 ? "" : "s")} · {c.Created:d MMM HH:mm}";
             Theme.DrawText(new Rect(row.x + 12, row.y + 22, row.width - 180, 18), sub, Theme.MutedSmall, Theme.TextMuted);
 
             GUI.enabled = !rm.Busy && !rm.Recording;

@@ -39,7 +39,6 @@ public class ReplayManager : MonoBehaviour
 
     // ---------------- State ----------------
     public ReplayClip Clip { get; private set; }
-    private ReplayClip loadingClip;
     public bool Recording { get; private set; }
     public bool Viewing { get; private set; }
     public bool Playing;
@@ -111,8 +110,10 @@ public class ReplayManager : MonoBehaviour
             gameObject.AddComponent<ReplayStudio>();
         if (GetComponent<SpectatorCams>() == null)
             gameObject.AddComponent<SpectatorCams>();
-        if (GetComponent<PostFX>() == null)
-            gameObject.AddComponent<PostFX>();
+        if (GetComponent<VRCamGrab>() == null)
+            gameObject.AddComponent<VRCamGrab>();
+        if (GetComponent<TagExplosions>() == null)
+            gameObject.AddComponent<TagExplosions>();
     }
 
     internal void LateFallback()
@@ -153,6 +154,7 @@ public class ReplayManager : MonoBehaviour
             Created = DateTime.Now,
             Rate = Mathf.Clamp(RecordRate, 10, 120),
         };
+        ReplayGameMode.Note(Clip);
 
         _bindings.Clear();
         _failedRigs.Clear();
@@ -178,11 +180,21 @@ public class ReplayManager : MonoBehaviour
         else StartRecording();
     }
 
-    public void StopRecording()
+    public void StopRecording() => StopRecording(true);
+
+    /// <summary>Stop recording and save. openIt = open the replay for viewing straight away.</summary>
+    public void StopRecording(bool openIt)
     {
         if (!Recording) return;
+        AutoRecording = false;
 
         DrainAudio();
+        // Anything still worn but missing from a gorilla's copy (a hat hidden the whole time) is copied now,
+        // while the gorillas are still here, so it's in the saved file.
+        CameraModes.RestoreHiddenHead();
+        foreach (Binding b in _bindings)
+            if (!b.Closed && b.Rig != null)
+                PuppetBuilder.CopyMissingWorn(b.Track, b.Rig);
         foreach (Binding b in _bindings)
             Close(b);
         Recording = false;
@@ -212,7 +224,9 @@ public class ReplayManager : MonoBehaviour
         Clip.OutPoint = 0f;
         Time = 0;
         Playing = false;
-        StartViewing();
+        if (openIt)
+            StartViewing();
+        StartCoroutine(FillMissingCosmetics(Clip));
 
         UIManager.Instance.Status = $"Recorded {FormatTime(Clip.Length)} with {Clip.Tracks.Count} gorilla{(Clip.Tracks.Count == 1 ? "" : "s")}. Saving...";
         Save();
@@ -235,7 +249,9 @@ public class ReplayManager : MonoBehaviour
             {
                 if (b.Closed) continue;
                 if (!Valid(b)) { Close(b); continue; }
+                b.Track.NoteMaterial(ReplayGameMode.MaterialIndexOf(b.Rig));   // tagged / infected / team look
                 b.Track.AppendFrame(b.Rig.transform, b.Parts);
+                ReplayEvents.Sample(b.Track, b.Track.FrameCount - 1);   // items changing size / switching on and off
             }
             if (cams)
                 CaptureCameras();
@@ -276,6 +292,8 @@ public class ReplayManager : MonoBehaviour
 
     private void UpdateRecording()
     {
+        // (the first person camera hides your hats / face from itself while it renders: never record that)
+        CameraModes.RestoreHiddenHead();
         if (UnityEngine.Time.unscaledTime >= _nextScan)
             ScanForRecording();
 
@@ -293,13 +311,22 @@ public class ReplayManager : MonoBehaviour
         if (RecordedSeconds >= MaxMinutes * 60f)
         {
             UIManager.Instance.Status = $"Replay reached the {MaxMinutes:0} minute limit.";
-            StopRecording();
+            if (AutoRecording)
+            {
+                // Auto record: save this part and carry straight on with the next one.
+                _autoPart++;
+                StopRecording(false);
+                _pendingAutoPart = true;
+            }
+            else
+                StopRecording();
         }
     }
 
     private void ScanForRecording()
     {
         _nextScan = UnityEngine.Time.unscaledTime + 0.5f;
+        ReplayGameMode.Note(Clip);   // the room's game mode can change mid-recording
 
         foreach (VRRig rig in LiveRigs())
         {
@@ -343,6 +370,7 @@ public class ReplayManager : MonoBehaviour
                 AudioRate = AudioSettings.outputSampleRate,
             };
 
+            CameraModes.RestoreHiddenHead();
             PuppetBuilder.BuildFromLive(track, rig, out Transform[] parts);
 
             Binding b = new Binding { Rig = rig, Key = key, Track = track, Parts = parts };
@@ -378,6 +406,7 @@ public class ReplayManager : MonoBehaviour
     private void Close(Binding b)
     {
         if (b.Closed) return;
+        ReplayEvents.End(b.Track);
         if (b.Tap != null)
         {
             DrainTap(b);
@@ -760,7 +789,11 @@ public class ReplayManager : MonoBehaviour
                 p.gameObject.SetActive(visible);
 
             if (visible)
+            {
                 t.Apply(local, p.transform, p.Parts);
+                ReplayGameMode.Apply(t, local);   // tagged / infected look at this moment
+                ReplayEvents.Apply(t, p, Mathf.FloorToInt(local));   // held items' size and parts on / off
+            }
         }
     }
 
@@ -816,6 +849,13 @@ public class ReplayManager : MonoBehaviour
         ReplayClip clip = Clip;
         string old = clip.FilePath;
         string path = UniquePath(clip.Name, old);
+
+        // Copy every gorilla's cosmetics (meshes + materials) into the file. Needs the main thread.
+        try { clip.Looks = LookBank.Capture(clip); }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MonkeFrames::Replay] Couldn't store cosmetics: {ex}");
+        }
 
         clip.Dirty = false;          // edits made while saving mark it dirty again
         clip.FilePath = path;
@@ -885,6 +925,19 @@ public class ReplayManager : MonoBehaviour
         });
     }
 
+    /// <summary>Cosmetics a gorilla wore that never got copied while recording, loaded from the game's assets.</summary>
+    private System.Collections.IEnumerator FillMissingCosmetics(ReplayClip clip)
+    {
+        VRRig model = CameraModes.LocalRig();
+        if (clip == null || model == null) yield break;
+        foreach (ReplayTrack t in clip.Tracks.ToArray())
+        {
+            if (Clip != clip) yield break;
+            if (t.Puppet == null || t.CosmeticIds == null || t.CosmeticIds.Length == 0) continue;
+            yield return StartCoroutine(PuppetBuilder.LoadCosmetics(t, t.Puppet, model));
+        }
+    }
+
     private void FinishLoad(ReplayClip clip)
     {
         StartCoroutine(FinishLoadRoutine(clip));
@@ -892,19 +945,22 @@ public class ReplayManager : MonoBehaviour
 
     private System.Collections.IEnumerator FinishLoadRoutine(ReplayClip clip)
     {
-        loadingClip = clip;
         bool loaded = false;
         try
         {
             if (Viewing) StopViewing();
             Unload();
 
+            LookBank.ReleaseRuntime();
             VRRig model = CameraModes.LocalRig();
-            foreach (ReplayTrack t in clip.Tracks)
+            for (int i = 0; i < clip.Tracks.Count; i++)
             {
-                ReplayPuppet puppet = PuppetBuilder.BuildFromSaved(t, model);
-                if (model != null)
+                ReplayTrack t = clip.Tracks[i];
+                ReplayPuppet puppet = PuppetBuilder.BuildFromSaved(t, model, clip.Looks, clip.Looks?.For(i));
+                // Cosmetics the file only knows by ID are loaded from the game's own assets.
+                if (model != null && puppet != null && t.CosmeticIds != null && t.CosmeticIds.Length > 0)
                     yield return StartCoroutine(PuppetBuilder.LoadCosmetics(t, puppet, model));
+                // the gorilla's own fur (newer replays), instead of the watcher's body tinted
                 ReplayFur.Apply(t, puppet);
             }
 
@@ -920,7 +976,6 @@ public class ReplayManager : MonoBehaviour
             if (!loaded && Clip != clip)
                 foreach (ReplayTrack t in clip.Tracks)
                     DestroyTrackObjects(t);
-            if (ReferenceEquals(loadingClip, clip)) loadingClip = null;
             _busy = false;
         }
     }
@@ -991,6 +1046,7 @@ public class ReplayManager : MonoBehaviour
 
     private static void DestroyTrackObjects(ReplayTrack t)
     {
+        ReplayEvents.Reset(t);
         if (t.Puppet != null)
         {
             t.Puppet.ReleaseOwned();
@@ -999,14 +1055,72 @@ public class ReplayManager : MonoBehaviour
         if (t.Voice != null) Destroy(t.Voice.gameObject);
         t.Puppet = null;
         t.Voice = null;
+        ReplayGameMode.Reset(t);
     }
 
     // =====================================================================
     //  Frame loop
     // =====================================================================
 
+    // ---------------- Auto record (join a lobby = start, leave = stop + save) ----------------
+    public bool AutoRecording { get; private set; }
+    private string _autoRoom;          // lobby the current / last auto recording was for
+    private int _autoPart = 1;
+    private bool _pendingAutoPart;
+    private bool _wasInRoom;
+    private float _joinedAt;
+
+    private void UpdateAutoRecord()
+    {
+        bool inRoom = false;
+        string room = null;
+        try
+        {
+            inRoom = Photon.Pun.PhotonNetwork.InRoom && Photon.Pun.PhotonNetwork.CurrentRoom != null;
+            room = inRoom ? Photon.Pun.PhotonNetwork.CurrentRoom.Name : null;
+        }
+        catch { }
+
+        if (inRoom && !_wasInRoom) _joinedAt = UnityEngine.Time.unscaledTime;
+        if (!inRoom && _wasInRoom)
+        {
+            // Left the lobby: stop and save (without opening it).
+            if (Recording && AutoRecording)
+            {
+                StopRecording(false);
+                UIManager.Instance.Status = "Left the lobby - auto recording saved.";
+            }
+            _autoRoom = null;
+            _pendingAutoPart = false;
+        }
+        _wasInRoom = inRoom;
+
+        bool enabled = Classes.Settings.current?.AutoRecordReplays ?? false;
+        if (!enabled || !inRoom || Recording || _busy || Viewing)
+            return;
+
+        // Give the lobby a moment to load everyone in, and only once per lobby
+        // (if you stop it yourself it won't restart until you join another one).
+        bool nextPart = _pendingAutoPart && _autoRoom == room;
+        if (!nextPart && (_autoRoom == room || UnityEngine.Time.unscaledTime - _joinedAt < 1.5f))
+            return;
+
+        if (!nextPart) _autoPart = 1;
+        _pendingAutoPart = false;
+        _autoRoom = room;
+        StartRecording();
+        if (Recording)
+        {
+            AutoRecording = true;
+            Clip.Name = $"Lobby {room} {DateTime.Now:yyyy-MM-dd HH-mm}" + (_autoPart > 1 ? $" part {_autoPart}" : "");
+            UIManager.Instance.Status = $"Joined lobby {room} - auto recording started.";
+        }
+    }
+
     private void Update()
     {
+        UpdateAutoRecord();
+
         string status = _pendingStatus;
         if (status != null)
         {
@@ -1030,7 +1144,7 @@ public class ReplayManager : MonoBehaviour
         // F9 starts / stops recording (not while typing in a text box).
         var kb = UnityEngine.InputSystem.Keyboard.current;
         if (kb != null && kb.f9Key.wasPressedThisFrame && GUIUtility.keyboardControl == 0
-            && UIManager.Instance != null && UIManager.Instance.Drawing)
+            && UIManager.Instance != null && UIManager.Instance.Drawing && !Windows.AdvancedKeyframeEditor.CapturingKeys)
             ToggleRecording();
 
         if (Recording)
@@ -1043,15 +1157,6 @@ public class ReplayManager : MonoBehaviour
     {
         RestoreLive();
         RestoreListener();
-        if (loadingClip != null && !ReferenceEquals(loadingClip, Clip))
-            foreach (var track in loadingClip.Tracks) DestroyTrackObjects(track);
-        if (Clip != null)
-        {
-            foreach (var track in Clip.Tracks) DestroyTrackObjects(track);
-            foreach (var camera in Clip.Cameras)
-                if (camera.Model != null) Destroy(camera.Model);
-        }
-        loadingClip = null;
     }
 
     // =====================================================================

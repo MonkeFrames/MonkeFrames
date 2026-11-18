@@ -122,6 +122,29 @@ public class SettingsWindow : IEditorWindow
         GUI.enabled = true;
         y += 38;
 
+        // Free cam movement speed (WASD / Q / E), with Shift = fast and Ctrl = slow
+        Settings st = Settings.current;
+        GUI.Label(new Rect(x, y, 120, 24), new GUIContent("Move speed", "Free cam speed with WASD / Q / E (metres per second)."));
+        // the slider runs on the square root of the speed: fine steps when slow, and it still reaches 100 m/s
+        float camSpeedT = Widgets.Slider("camspeed", new Rect(x + 120, y, w - x * 2 - 190, 24), Mathf.Sqrt(Mathf.Clamp(st.CameraSpeed, 0.5f, 100f)), Mathf.Sqrt(0.5f), 10f);
+        st.CameraSpeed = camSpeedT * camSpeedT;
+        GUI.Label(new Rect(w - x - 64, y, 64, 24), st.CameraSpeed < 10f ? $"{st.CameraSpeed:0.0} m/s" : $"{st.CameraSpeed:0} m/s", Theme.LabelRight);
+        y += 32;
+        GUI.Label(new Rect(x, y, 120, 24), new GUIContent("Shift = fast", "Hold Shift while moving to go this many times faster."));
+        st.CameraFastMultiplier = Widgets.Slider("camfast", new Rect(x + 120, y, w - x * 2 - 190, 24), st.CameraFastMultiplier, 1.5f, 25f);
+        GUI.Label(new Rect(w - x - 64, y, 64, 24), $"{st.CameraFastMultiplier:0.0}x", Theme.LabelRight);
+        y += 32;
+        GUI.Label(new Rect(x, y, 120, 24), new GUIContent("Ctrl = slow", "Hold Ctrl while moving for slow, precise moves."));
+        st.CameraSlowMultiplier = Widgets.Slider("camslow", new Rect(x + 120, y, w - x * 2 - 190, 24), st.CameraSlowMultiplier, 0.05f, 0.6f);
+        GUI.Label(new Rect(w - x - 64, y, 64, 24), $"{st.CameraSlowMultiplier:0.00}x", Theme.LabelRight);
+        y += 32;
+        st.CameraSmoothMove = Widgets.Switch("camsmoothmove", new Rect(x, y, w - x * 2, 26), st.CameraSmoothMove,
+            "Smooth movement", "The camera glides up to speed and to a stop instead of starting and stopping instantly.");
+        y += 32;
+        st.CameraFollowToNewMap = Widgets.Switch("camnewmap", new Rect(x, y, w - x * 2, 26), st.CameraFollowToNewMap,
+            "Come with me to new maps", "When you load into another map, the free camera jumps to you instead of staying behind in the old one.");
+        y += 36;
+
         Settings.current.AutoLevel = Widgets.Switch("autolevel", new Rect(x, y, w - x * 2, 26), Settings.current.AutoLevel,
             "Auto-level tilt", "While tilting (right-drag) the horizon sticks at level, and letting go close to level glides it the rest of the way.");
         y += 32;
@@ -153,8 +176,41 @@ public class SettingsWindow : IEditorWindow
         Settings.current.ShowCamerasInReplays = Widgets.Switch("replaycams", new Rect(x, y, w - x * 2, 26), Settings.current.ShowCamerasInReplays,
             "Show cameras in replays", "Replays record every MonkeFrames camera (yours too) and show them as camera models.");
         y += 30;
+        Settings.current.ReplayLiveCosmetics = Widgets.Switch("replaylivecos", new Rect(x, y, w - x * 2, 26), Settings.current.ReplayLiveCosmetics,
+            "Animated cosmetics in replays", "On = worn cosmetics on replay gorillas are the real game cosmetic, so they animate. Off = an exact still copy. Held items always follow the recording.");
+        y += 30;
+        Settings.current.DesktopNoGravity = Widgets.Switch("desknograv", new Rect(x, y, w - x * 2, 26), Settings.current.DesktopNoGravity,
+            "Desktop: gorilla doesn't fall", "Without a VR headset your gorilla floats where it is (no gravity), so it doesn't fall out of the world when you switch maps.");
+        y += 30;
+        Settings.current.DesktopAntiKick = Widgets.Switch("deskantikick", new Rect(x, y, w - x * 2, 26), Settings.current.DesktopAntiKick,
+            "Desktop: anti AFK kick", "Without a VR headset the game never kicks you for standing still.");
+        y += 30;
         Settings.current.TintCameraLogo = Widgets.Switch("tintcamlogo", new Rect(x, y, w - x * 2, 26), Settings.current.TintCameraLogo,
             "Gorilla-colour camera glow", "On = the glowing logo on each camera takes that player's gorilla colour. Off = the logo's own colours.");
+        y += 30;
+        Settings.current.NewCameraModel = Widgets.Switch("newcammodel", new Rect(x, y, w - x * 2, 26), Settings.current.NewCameraModel,
+            "New camera model", "On = the new camera model from MonkeFrames 2.1. Off = the classic camera with the glowing logo. Only changes how cameras look to you.");
+        y += 34;
+
+        // ---- Grabbing cameras in VR ----
+        Widgets.Divider(x, y - 4, w - x * 2);
+        y += 6;
+        GUI.Label(new Rect(x, y, 300, 20), "CAMERA IN VR", Theme.Header);
+        y += 24;
+        Settings.current.VRCameraGrab = Widgets.Switch("vrgrab", new Rect(x, y, w - x * 2, 26), Settings.current.VRCameraGrab,
+            "Grab cameras in VR", "In VR you see your camera: grip near it to pick it up (other MonkeFrames users' cameras too, if they allow it). Trigger while holding turns it around.");
+        y += 30;
+        Settings.current.LetOthersGrabMyCamera = Widgets.Switch("vrgrabothers", new Rect(x, y, w - x * 2, 26), Settings.current.LetOthersGrabMyCamera,
+            "Let others grab my camera", "MonkeFrames users in VR can pick up your camera and film with it (never while a keyframe project plays).");
+        y += 30;
+        Settings.current.VRGrabLooksAtHolder = Widgets.Switch("vrgrablook", new Rect(x, y, w - x * 2, 26), Settings.current.VRGrabLooksAtHolder,
+            "Held camera looks at the holder", "On = a grabbed camera films whoever holds it (vlog style). Off = it points where the hand points.");
+        y += 30;
+        Settings.current.VRHeadAttach = Widgets.Switch("vrgrabhead", new Rect(x, y, w - x * 2, 26), Settings.current.VRHeadAttach,
+            "Put it on someone's head", "Hold a grabbed camera against a player's head for 3 seconds: it goes onto them (first person). Grab it again to take it off.");
+        y += 34;
+        Settings.current.VRSelfAttach = Widgets.Switch("vrgrabself", new Rect(x, y, w - x * 2, 26), Settings.current.VRSelfAttach,
+            "Put it on my own head", "Hold the camera you're holding against your own face for 3 seconds: it goes into first person on you. Reach up and grab it again to take it off.");
         y += 34;
 
         Widgets.Divider(x, y - 4, w - x * 2);
@@ -290,16 +346,16 @@ public class SettingsWindow : IEditorWindow
         Color[] px = new Color[n * n];
         float r = n / 2f;
         for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++)
-            {
-                float dx = x + 0.5f - r, dy = y + 0.5f - r;   // texture rows go up, like the maths
-                float dist = Mathf.Sqrt(dx * dx + dy * dy);
-                float a = Mathf.Atan2(dy, dx);
-                if (a < 0f) a += Mathf.PI * 2f;
-                Color col = Color.HSVToRGB(a / (Mathf.PI * 2f), Mathf.Clamp01(dist / (r - 2f)), 1f);
-                col.a = Mathf.Clamp01(r - 1f - dist);
-                px[y * n + x] = col;
-            }
+        for (int x = 0; x < n; x++)
+        {
+            float dx = x + 0.5f - r, dy = y + 0.5f - r;   // texture rows go up, like the maths
+            float dist = Mathf.Sqrt(dx * dx + dy * dy);
+            float a = Mathf.Atan2(dy, dx);
+            if (a < 0f) a += Mathf.PI * 2f;
+            Color col = Color.HSVToRGB(a / (Mathf.PI * 2f), Mathf.Clamp01(dist / (r - 2f)), 1f);
+            col.a = Mathf.Clamp01(r - 1f - dist);
+            px[y * n + x] = col;
+        }
         _wheel.SetPixels(px);
         _wheel.Apply();
         return _wheel;

@@ -1,4 +1,4 @@
-﻿using MonkeFrames.Compiler.Models;
+using MonkeFrames.Compiler.Models;
 using MonkeFrames.Editor.Attributes;
 using MonkeFrames.Editor.Components;
 using MonkeFrames.Editor.Interfaces;
@@ -38,9 +38,22 @@ public class FileMenu : IEditorMenu
         KeyframeManager.Instance.LoadProject(project);
     }
 
-    [EditorMenuItem("Save", Shortcut = "^S")]
+    // No Ctrl+S here: Ctrl (slow) + S (back) flies the free camera, and a save dialog would pop up mid-shot.
+    [EditorMenuItem("Save")]
     public void SaveProject()
     {
         SaveUtilities.Save();
+    }
+
+    [EditorMenuItem("Close Project", Separator = true)]
+    public void CloseProject()
+    {
+        KeyframeManager.Instance.CloseProject();
+    }
+
+    [EditorMenuItem("Reopen Last Closed")]
+    public void ReopenProject()
+    {
+        KeyframeManager.Instance.ReopenLastClosed();
     }
 }

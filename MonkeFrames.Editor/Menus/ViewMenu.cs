@@ -4,10 +4,11 @@ using MonkeFrames.Editor.Interfaces;
 
 namespace MonkeFrames.Editor.Menus;
 
-public sealed class ViewMenu : IEditorMenu
+public class ViewMenu : IEditorMenu
 {
     public string Name => "View";
-    public int Index => 10;
+    public int Index => 3;
+
     [EditorMenuItem("Hide UI", Shortcut = "^H")]
     public void ToggleUI() => UIManager.Instance.ToggleUI();
 }

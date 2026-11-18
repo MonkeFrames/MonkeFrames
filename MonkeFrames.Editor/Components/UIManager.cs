@@ -52,16 +52,20 @@ public class UIManager : MonoBehaviour
     public int FocusedWindow = -1;
 
     public bool Drawing;
+
+    /// <summary>The user hid the editor UI (View > Hide UI, Ctrl+H).</summary>
     public bool HiddenByUser { get; private set; }
+
+    /// <summary>True when the editor UI is actually on screen.</summary>
     public bool Visible => Drawing && !HiddenByUser;
 
-    public void ToggleUI()
-    {
-        HiddenByUser = !HiddenByUser;
-        CurrentMenuIndex = -1;
-        _dropdownRect = default;
-        GUIUtility.keyboardControl = 0;
-    }
+    /// <summary>0 = shown, 1 = hidden: the UI slides up and fades out (and back down) instead of popping.</summary>
+    private float _hideProgress;
+    private const float HideTime = 0.38f;
+    private const float HideSlide = 110f;   // pixels the UI rises while it fades
+
+    /// <summary>Opacity for everything the editor draws (windows multiply their own fade by it).</summary>
+    public float UIAlpha => 1f - Anim.InOutCubic(_hideProgress);
 
     private IEditorMenuManager _dropdownMenu;
     private float _dropdownProgress;
@@ -176,6 +180,18 @@ public class UIManager : MonoBehaviour
         }
     }
 
+    /// <summary>Hide or show the whole editor UI. Ctrl+H keeps working while it's hidden.</summary>
+    public void ToggleUI()
+    {
+        HiddenByUser = !HiddenByUser;
+        CurrentMenuIndex = -1;
+        _dropdownMenu = null;
+        _dropdownProgress = 0f;
+        _dropdownRect = Rect.zero;
+        GUIUtility.keyboardControl = 0;
+        Status = HiddenByUser ? "UI hidden. Press Ctrl+H to bring it back." : "UI shown.";
+    }
+
     public void OpenWindow(string menuName)
     {
         Windows.First(w => w.Window.Name == menuName).Visible = true;
@@ -222,6 +238,10 @@ public class UIManager : MonoBehaviour
 
         float target = CurrentMenuIndex != -1 ? 1f : 0f;
         _dropdownProgress = Mathf.MoveTowards(_dropdownProgress, target, dt * Anim.Speed / DropdownTime);
+
+        _hideProgress = Anim.Enabled
+            ? Mathf.MoveTowards(_hideProgress, HiddenByUser ? 1f : 0f, dt * Anim.Speed / HideTime)
+            : (HiddenByUser ? 1f : 0f);
     }
 
     public void OnGUI()
@@ -229,13 +249,20 @@ public class UIManager : MonoBehaviour
         if (!Drawing)
             return;
 
-        HandleControlShortcuts(); // Ctrl+H must also restore a hidden menu bar.
-        if (HiddenByUser) return;
-
         GUISkin prevSkin = GUI.skin;
         GUI.skin = Theme.Skin;
         GUI.backgroundColor = Color.white;
         GUI.color = Color.white;
+
+        // Hidden by the user: only Ctrl shortcuts (Ctrl+H brings it back) and the "UI hidden" toast while it fades out.
+        if (HiddenByUser && _hideProgress >= 1f)
+        {
+            HandleControlShortcuts();
+            if (HiddenByUser)
+                DrawStatus();
+            GUI.skin = prevSkin;
+            return;
+        }
 
         // Clicking anywhere (or pressing Escape) drops text-field focus so keyboard shortcuts work again.
         // A text field that was clicked grabs focus straight back while it processes this same event.
@@ -255,6 +282,19 @@ public class UIManager : MonoBehaviour
             return;
         }
 
+        HandleControlShortcuts();
+
+        // Sliding away / back: everything rises and fades together; no clicks while it's on its way out.
+        Matrix4x4 prevMatrix = GUI.matrix;
+        float slide = Anim.InOutCubic(_hideProgress);
+        if (slide > 0f)
+        {
+            GUI.matrix = Matrix4x4.Translate(new Vector3(0f, -HideSlide * slide, 0f)) * prevMatrix;
+            GUI.color = new Color(1f, 1f, 1f, 1f - slide);
+            if (HiddenByUser && (Event.current.isMouse || Event.current.type == EventType.ScrollWheel))
+                Event.current.Use();
+        }
+
         CloseMenuOnOutsideClick();
         DrawMenuBar();
 
@@ -265,6 +305,8 @@ public class UIManager : MonoBehaviour
             window.Draw();
 
         DrawDropdown();
+        GUI.matrix = prevMatrix;
+        GUI.color = Color.white;
         DrawStatus();
         IntroScreen.Draw();
 

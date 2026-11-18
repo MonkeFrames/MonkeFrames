@@ -10,7 +10,7 @@ namespace MonkeFrames.Editor.Menus;
 public class ExtensionsMenu : IEditorMenu
 {
     public string Name => "Extensions";
-    public int Index => 8;
+    public int Index => 10;
 
     [EditorMenuItem("Extensions Gallery")]
     public void OpenExtensionsGallery()

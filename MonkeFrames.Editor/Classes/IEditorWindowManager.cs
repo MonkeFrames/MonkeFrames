@@ -26,6 +26,9 @@ public class IEditorWindowManager
     public bool Visible = false;
     public bool LastVisible = false;
 
+    /// <summary>A window can ask to be resized from inside its OnDraw (applied after the window is drawn).</summary>
+    public Vector2? RequestedSize;
+
     /// <summary>Linear 0..1 open progress. Eased when drawn.</summary>
     public float Progress;
 
@@ -66,7 +69,8 @@ public class IEditorWindowManager
     }
 
     /// <summary>Eased visibility used for alpha.</summary>
-    private float Alpha => Visible ? Anim.OutCubic(Progress) : Anim.InCubic(Progress) * 0.85f + Progress * 0.15f;
+    private float Alpha => (Visible ? Anim.OutCubic(Progress) : Anim.InCubic(Progress) * 0.85f + Progress * 0.15f)
+        * (UIManager.Instance != null ? UIManager.Instance.UIAlpha : 1f);
 
     /// <summary>Eased scale: pops in with a little overshoot, shrinks slightly when closing.</summary>
     private float Scale => Visible
@@ -174,6 +178,11 @@ public class IEditorWindowManager
         // Only accept drag results once the window is settled (the draw rect is offset while animating).
         if (!animating && Visible)
             WindowPosition = result;
+        if (RequestedSize.HasValue)
+        {
+            WindowPosition.size = RequestedSize.Value;
+            RequestedSize = null;
+        }
 
         GUI.matrix = prevMatrix;
         GUI.color = prevColor;

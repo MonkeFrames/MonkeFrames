@@ -12,7 +12,13 @@ public class Settings
 {
     public static Settings current;
 
-    public Color AccentColor = Color.blue;
+    public Color AccentColor = DefaultAccent;
+
+    /// <summary>The default accent colour (yellow).</summary>
+    public static readonly Color DefaultAccent = new Color(1f, 0.80f, 0.12f, 1f);
+
+    /// <summary>Settings layout version (older saves get one-time updates).</summary>
+    public int UiVersion = 0;
     public bool Autosave = true;
 
     /// <summary>Play the animated logo intro when MonkeFrames loads.</summary>
@@ -49,6 +55,17 @@ public class Settings
     /// <summary>Double right-click levels the horizon.</summary>
     public bool DoubleClickLevel = true;
 
+    /// <summary>Free cam (WASD / Q / E) speed in metres per second, the same at any frame rate.</summary>
+    public float CameraSpeed = 3f;
+    /// <summary>Hold Shift: this many times faster.</summary>
+    public float CameraFastMultiplier = 4f;
+    /// <summary>Hold Ctrl: this fraction of the speed (precise moves).</summary>
+    public float CameraSlowMultiplier = 0.2f;
+    /// <summary>The free cam speeds up and slows down smoothly instead of starting / stopping instantly.</summary>
+    public bool CameraSmoothMove = true;
+    /// <summary>When you load into another map (your gorilla is teleported far away), the free camera comes with you.</summary>
+    public bool CameraFollowToNewMap = true;
+
     /// <summary>Let other MonkeFrames users see a camera model where your camera is.</summary>
     public bool ShareMyCamera = true;
 
@@ -58,14 +75,37 @@ public class Settings
     /// <summary>Show recorded spectator cameras when watching replays.</summary>
     public bool ShowCamerasInReplays = true;
 
+    /// <summary>Wearable cosmetics on replay gorillas are the real game cosmetic (they animate and react) instead of a still copy.</summary>
+    public bool ReplayLiveCosmetics = true;
+
+    /// <summary>Desktop (no headset): the gorilla floats instead of falling.</summary>
+    public bool DesktopNoGravity = true;
+    /// <summary>Desktop (no headset): never get kicked for being AFK.</summary>
+    public bool DesktopAntiKick = true;
+
     /// <summary>Recolour the spectator camera's logo and glow with each player's gorilla colour.</summary>
     public bool TintCameraLogo = false;
+
+    /// <summary>Use the newer spectator camera model (from MonkeFrames 2.1 dev) instead of the classic glowing one.</summary>
+    public bool NewCameraModel = false;
+
+    /// <summary>In VR: see your camera, and grab cameras (yours, and other MonkeFrames users' if they allow it) with the grip.</summary>
+    public bool VRCameraGrab = true;
+    /// <summary>Other MonkeFrames users in VR may pick up and move your camera.</summary>
+    public bool LetOthersGrabMyCamera = true;
+    /// <summary>A grabbed camera turns to look at whoever holds it (off = it points where the hand points).</summary>
+    public bool VRGrabLooksAtHolder = true;
+    /// <summary>Hold a grabbed camera against someone's head for 3 seconds to put it on them (first person).</summary>
+    public bool VRHeadAttach = true;
+    /// <summary>Holding a grabbed camera against your own face for 3 s puts it in first person on you.</summary>
+    public bool VRSelfAttach = true;
 
     /// <summary>Start recording a replay whenever you join a lobby; stop and save when you leave.</summary>
     public bool AutoRecordReplays = false;
 
     // ---- Tag effects (neon explosion when someone gets tagged) ----
     public bool TagFX = true;
+    public int TagFXStyle = 0;          // 0 neon burst, 1 explosion (fireball, smoke, debris, boom)
     public int TagFXWho = 0;            // 0 everyone, 1 only me, 2 only others
     public int TagFXColorMode = 0;      // 0 gorilla colour, 1 custom, 2 rainbow
     public Color TagFXColor = new Color(1f, 0.1f, 0.6f);
@@ -82,96 +122,15 @@ public class Settings
     public bool TagFXSound = true;
     public float TagFXVolume = 0.5f;
 
-    public bool Bloom = false;
-    public float BloomIntensity = 0.8f;
-    public float BloomThreshold = 0.5f;
-    public float BloomSize = 0.65f;
-    public float BloomScatter = 0.6f;
-    public Color BloomTint = Color.white;
+    /// <summary>First person camera (Other Cameras > First Person): saved so it's the same after a restart.</summary>
+    public FirstPersonSettings FirstPerson = new();
 
-    public bool ChromaticAberration = false;
-    public float ChromaticIntensity = 0.35f;
-
-    public bool GlobalMotionBlur = false;
-    public float GlobalMotionBlurStrength = 0.5f;
-    public int MotionBlurSamples = 6;
+    /// <summary>Settings MonkeFrames doesn't know (e.g. the old "Gfx" graphics section, now the Photoreal mod's)
+    /// are kept as they are when the file is saved again.</summary>
+    [JsonExtensionData] public System.Collections.Generic.IDictionary<string, Newtonsoft.Json.Linq.JToken> Unknown;
 
     /// <summary>Tag explosions: also draw them in the VR headset (off = MonkeFrames camera only).</summary>
     public bool TagFXInVR = false;
-
-    public bool DepthOfField = false;
-    public bool DofAutoFocus = true;
-    public float DofFocus = 3f;
-    public float DofAperture = 0.35f;
-    public int DofSamples = 12;
-    public float DofFocusSpeed = 0.5f;
-
-    public bool ColorGrading = false;
-    public float Exposure = 0f;        // stops
-    public float Contrast = 1f;
-    public float Temperature = 0f;     // -1 cool .. 1 warm
-    public float Tint = 0f;            // -1 green .. 1 magenta
-
-    public bool Vignette = false;
-    public float VignetteIntensity = 0.4f;
-    public float VignetteSmoothness = 0.5f;
-    public bool VignetteRounded = true;
-    public Color VignetteColor = Color.black;
-
-    public bool FilmGrain = false;
-    public float GrainIntensity = 0.25f;
-    public float GrainSize = 0.4f;
-
-    public bool Letterbox = false;
-    public float LetterboxAspect = 2.39f;
-
-    public void ResetPostProcessing()
-    {
-        Bloom = false; BloomIntensity = 0.8f; BloomThreshold = 0.5f; BloomSize = 0.65f; BloomScatter = 0.6f; BloomTint = Color.white;
-        ChromaticAberration = false; ChromaticIntensity = 0.35f;
-        GlobalMotionBlur = false; GlobalMotionBlurStrength = 0.5f; MotionBlurSamples = 6;
-        DepthOfField = false; DofAutoFocus = true; DofFocus = 3f; DofAperture = 0.35f; DofSamples = 12; DofFocusSpeed = 0.5f;
-        ColorGrading = false; Exposure = 0f; Contrast = 1f; Temperature = 0f; Tint = 0f;
-        Vignette = false; VignetteIntensity = 0.4f; VignetteSmoothness = 0.5f; VignetteRounded = true; VignetteColor = Color.black;
-        FilmGrain = false; GrainIntensity = 0.25f; GrainSize = 0.4f;
-        Letterbox = false; LetterboxAspect = 2.39f;
-    }
-
-    /// <summary>One-click looks for the Post Processing window.</summary>
-    public void ApplyPostPreset(string name)
-    {
-        ResetPostProcessing();
-        switch (name)
-        {
-            case "Cinematic":
-                Bloom = true; BloomIntensity = 0.6f; BloomThreshold = 0.6f;
-                ColorGrading = true; Contrast = 1.15f; Temperature = 0.15f; Exposure = -0.1f;
-                Vignette = true; VignetteIntensity = 0.45f;
-                Letterbox = true; LetterboxAspect = 2.39f;
-                FilmGrain = true; GrainIntensity = 0.15f;
-                GlobalMotionBlur = true; GlobalMotionBlurStrength = 0.4f;
-                break;
-            case "Dreamy":
-                Bloom = true; BloomIntensity = 1.4f; BloomThreshold = 0.3f; BloomSize = 0.9f; BloomScatter = 0.8f;
-                BloomTint = new Color(1f, 0.85f, 0.95f);
-                ColorGrading = true; Contrast = 0.9f; Exposure = 0.2f; Tint = 0.15f;
-                Vignette = true; VignetteIntensity = 0.3f; VignetteSmoothness = 0.9f;
-                break;
-            case "Action":
-                Bloom = true; BloomIntensity = 0.7f;
-                ChromaticAberration = true; ChromaticIntensity = 0.4f;
-                GlobalMotionBlur = true; GlobalMotionBlurStrength = 0.8f;
-                ColorGrading = true; Contrast = 1.25f; Temperature = -0.1f;
-                Vignette = true; VignetteIntensity = 0.5f;
-                break;
-            case "Retro":
-                ChromaticAberration = true; ChromaticIntensity = 0.6f;
-                ColorGrading = true; Contrast = 1.1f; Temperature = 0.35f; Exposure = -0.2f;
-                Vignette = true; VignetteIntensity = 0.6f; VignetteSmoothness = 0.7f;
-                FilmGrain = true; GrainIntensity = 0.45f; GrainSize = 0.7f;
-                break;
-        }
-    }
 
     public static void Load()
     {
@@ -182,20 +141,29 @@ public class Settings
 
         if (!File.Exists(SystemUtilities.Combine(Constants.DataFolder, "config.json")))
         {
-            current = new Settings();
+            current = new Settings { UiVersion = 1 };
             return;
         }
 
         string prefs = File.ReadAllText(SystemUtilities.Combine(Constants.DataFolder, "config.json"));
         current = JsonConvert.DeserializeObject<Settings>(prefs, settings) ?? new Settings();
         current.Sources ??= new SourcesSettings();
+
+        // 2.13: the default accent is yellow (was pure blue); a changed colour is kept
+        if (current.UiVersion < 1)
+        {
+            Color a = current.AccentColor;
+            if (Mathf.Abs(a.r) < 0.01f && Mathf.Abs(a.g) < 0.01f && Mathf.Abs(a.b - 1f) < 0.01f)
+                current.AccentColor = DefaultAccent;
+            current.UiVersion = 1;
+        }
     }
 
     public static void Save()
     {
         current ??= new Settings();
         current.Sources ??= new SourcesSettings();
-        CameraModes.Instance?.SaveSettings(current.Sources);
+        try { CameraModes.Instance?.SaveSettings(current.Sources); } catch { }
 
         var settings = new JsonSerializerSettings
         {
@@ -210,6 +178,29 @@ public class Settings
 
         KeyframeManager.Instance.RefreshOrbs();
     }
+}
+
+/// <summary>First person camera settings (angle clamping, head-space offset, head cosmetics hiding and friends:
+/// the first person features of Pokruk's Camera Mod, rebuilt for MonkeFrames).</summary>
+[System.Serializable]
+public class FirstPersonSettings
+{
+    public float FieldOfView = 100f;
+    public float TurnSmooth = 0.35f;          // 0 = locked to the head, 1 = very floaty
+    public bool LevelHorizon = true;          // roll lock
+    public bool FollowPitch = true;           // look up / down with the head
+    public bool OffsetFollowsHead = false;    // offset in head space (moves with head tilt) instead of a level frame
+    public float Forward = 0.12f, Up = 0f, Side = 0f;
+    public float Pitch = 0f, Yaw = 0f;
+    public float BobSmooth = 0f;
+    public float NearClip = 0.01f;            // 0 = game default
+    public bool AngleClamp = true;            // the view never lags more than MaxAngle behind the head
+    public float MaxAngle = 30f;
+    public bool ShowClampGuide = false;       // circle of the clamp range + where the head points
+    public bool HideHeadCosmetics = true;     // hats / face items hidden from the MonkeFrames camera only
+    /// <summary>CastingShouldBeFree's first person: locked inside the head mesh (0.15 m up), looking exactly where the
+    /// head looks, only turning smoothed. Off = the classic MonkeFrames first person with all its options.</summary>
+    public bool CastingStyle = true;
 }
 
 /// <summary>Persistent camera mode and tuning values used by the Sources window.</summary>
@@ -232,9 +223,6 @@ public class SourcesSettings
     public float OrbitHeight = 0.4f;
     public float OrbitAngle = 12f;
     public bool OrbitRelative;
-
-    public bool LevelHorizon = true;
-    public float ForwardOffset = 0.12f;
 
     public float FollowDistance = 2.5f;
     public float FollowHeight = 0.8f;

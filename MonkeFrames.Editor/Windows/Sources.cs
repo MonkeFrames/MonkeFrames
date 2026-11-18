@@ -124,11 +124,77 @@ public class Sources : IEditorWindow
                 break;
 
             case CameraMode.FirstPerson:
-                cm.LevelHorizon = Widgets.Switch("oc.level", new Rect(x, y, innerW, 26), cm.LevelHorizon,
-                    "Level horizon", "Removes head tilt so the view stays level.");
+                cm.FpCastingStyle = Widgets.Switch("oc.fpcast", new Rect(x, y, innerW, 26), cm.FpCastingStyle,
+                    "Casting style", "CastingShouldBeFree's first person: inside the gorilla's head, looking exactly where they look (head tilt included). Only turning is smoothed (Turn smooth). Off = the classic first person with all its options.");
                 y += 32;
-                cm.ForwardOffset = SliderRow("oc.fwd", ref y, "Eye offset", cm.ForwardOffset, 0f, 0.4f, "0.00", "m");
-                Hint(ref y, "Position is locked to the head. Smoothing only affects turning.");
+                if (cm.FpCastingStyle)
+                {
+                    cm.FpTurnSmooth = SliderRow("oc.fpcsmooth", ref y, "Turn smoothing", cm.FpTurnSmooth, 0f, 1f, "", "", percent: true);
+                    {
+                        // quick picks
+                        string[] names = ["Locked", "Light", "Smooth", "Floaty"];
+                        float[] vals = [0f, 0.25f, 0.5f, 0.8f];
+                        float bw = (innerW - 4 * (names.Length - 1)) / names.Length;
+                        for (int i = 0; i < names.Length; i++)
+                            if (GUI.Button(new Rect(x + i * (bw + 4), y, bw, 24), names[i]))
+                            {
+                                cm.FpTurnSmooth = vals[i];
+                                UIManager.Instance.Status = $"First person turning: {names[i]}.";
+                            }
+                        y += 32;
+                    }
+                    cm.FpHideHeadCosmetics = Widgets.Switch("oc.fphide", new Rect(x, y, innerW, 26), cm.FpHideHeadCosmetics,
+                        "Hide hats and face items", "The watched gorilla's hat and face cosmetics are hidden from the MonkeFrames camera only (VR and other players still see them).");
+                    y += 32;
+                    cm.FpNearClip = SliderRow("oc.fpnear", ref y, "Near clip", cm.FpNearClip, 0f, 1f, "0.00", "m");
+                    Hint(ref y, "Turn smoothing: 0% = locked to the head, higher = the view eases after head turns (position never lags). In VR: hold your camera against your face for 3 s to go first person on yourself.");
+                    break;
+                }
+                cm.LevelHorizon = Widgets.Switch("oc.level", new Rect(x, y, innerW, 26), cm.LevelHorizon,
+                    "Level horizon (roll lock)", "Removes head tilt so the view stays level.");
+                y += 32;
+                cm.FpFollowPitch = Widgets.Switch("oc.fpitch", new Rect(x, y, innerW, 26), cm.FpFollowPitch,
+                    "Look up/down with head", "Off = the view always stays level, only turning left and right.");
+                y += 32;
+                cm.FpHideHeadCosmetics = Widgets.Switch("oc.fphide", new Rect(x, y, innerW, 26), cm.FpHideHeadCosmetics,
+                    "Hide head cosmetics", "Hats, glasses and face items on the watched gorilla's head are hidden from the MonkeFrames camera only (VR and other players still see them).");
+                y += 32;
+
+                // angle clamping: the view can lag (smoothing) but never more than this far behind the head
+                cm.FpAngleClamp = Widgets.Switch("oc.fpclamp", new Rect(x, y, 170, 26), cm.FpAngleClamp, "Angle clamping",
+                    "However smooth the turning is, the view never falls more than this many degrees behind where the head looks, so fast turns don't leave it behind.");
+                GUI.enabled = cm.FpAngleClamp;
+                cm.FpMaxAngle = Widgets.Slider("oc.fpmax", new Rect(x + 180, y, innerW - 180 - 60, 26), cm.FpMaxAngle, 2f, 90f);
+                GUI.Label(new Rect(x + innerW - 56, y, 56, 26), $"{cm.FpMaxAngle:0}°", Theme.LabelRight);
+                y += 32;
+                cm.FpShowClampGuide = Widgets.Switch("oc.fpguide", new Rect(x, y, innerW, 26), cm.FpShowClampGuide,
+                    "Show clamp guide", "Draws a circle for the clamping range and a red dot where the head is pointing (an overlay while you set it up: not shown during playback or in exports).");
+                GUI.enabled = true;
+                y += 32;
+                cm.FpOffsetFollowsHead = Widgets.Switch("oc.fphead", new Rect(x, y, innerW, 26), cm.FpOffsetFollowsHead,
+                    "Offset moves with head tilt", "On = the position offset is in head space, like a camera strapped to the head. Off = it stays level when looking up or down.");
+                y += 32;
+                {
+                    string[] presets = ["Eyes", "Forehead", "Chest", "Behind head", "Side", "Head cam"];
+                    float pw = (innerW - 4 * (presets.Length - 1)) / presets.Length;
+                    for (int i = 0; i < presets.Length; i++)
+                        if (GUI.Button(new Rect(x + i * (pw + 4), y, pw, 24), presets[i]))
+                        {
+                            cm.ApplyFirstPersonPreset(presets[i]);
+                            UIManager.Instance.Status = $"First person: {presets[i]}.";
+                        }
+                    y += 32;
+                }
+                GUI.Label(new Rect(x, y, 200, 20), "POSITION", Theme.Header);
+                y += 22;
+                cm.ForwardOffset = SliderRow("oc.fwd", ref y, "Forward", cm.ForwardOffset, -1f, 1f, "0.00", "m");
+                cm.FpUp = SliderRow("oc.fup", ref y, "Up", cm.FpUp, -1f, 1f, "0.00", "m");
+                cm.FpSide = SliderRow("oc.fside", ref y, "Right", cm.FpSide, -1f, 1f, "0.00", "m");
+                cm.FpPitch = SliderRow("oc.fpp", ref y, "Look up", cm.FpPitch, -45f, 45f, "0", "°");
+                cm.FpYaw = SliderRow("oc.fpy", ref y, "Look right", cm.FpYaw, -90f, 90f, "0", "°");
+                cm.FpBobSmooth = SliderRow("oc.fplag", ref y, "Bob smooth", cm.FpBobSmooth, 0f, 1f, "", "", percent: true);
+                cm.FpNearClip = SliderRow("oc.fpnear", ref y, "Near clip", cm.FpNearClip, 0f, 1f, "0.00", "m");
+                Hint(ref y, "Offsets move with the head. Near clip hides things right in front of the lens (0 = game default). Head-bob smooth softens bumpy movement.");
                 break;
 
             case CameraMode.Follow:
@@ -209,9 +275,20 @@ public class Sources : IEditorWindow
         y += 24;
 
         GUI.enabled = !(cm.Mode == CameraMode.Tracking && cm.TrackingAutoZoom);
-        cm.FieldOfView = SliderRow("oc.fov", ref y, "FOV", cm.FieldOfView, 30f, 130f, "0", "°");
-        GUI.enabled = true;
-        cm.Smoothing = SliderRow("oc.smooth", ref y, cm.Mode == CameraMode.FirstPerson ? "Turn smooth" : "Smoothing", cm.Smoothing, 0f, 1f, "", "", percent: true);
+        if (cm.Mode == CameraMode.FirstPerson)
+        {
+            // first person keeps its own FOV and turn smoothing (saved with its other settings)
+            cm.FpFieldOfView = SliderRow("oc.fpfov", ref y, "FOV", cm.FpFieldOfView, 30f, 140f, "0", "°");
+            GUI.enabled = true;
+            if (!cm.FpCastingStyle)   // (casting style has its own Turn smoothing row above)
+                cm.FpTurnSmooth = SliderRow("oc.fpsmooth", ref y, "Turn smooth", cm.FpTurnSmooth, 0f, 1f, "", "", percent: true);
+        }
+        else
+        {
+            cm.FieldOfView = SliderRow("oc.fov", ref y, "FOV", cm.FieldOfView, 30f, 130f, "0", "°");
+            GUI.enabled = true;
+            cm.Smoothing = SliderRow("oc.smooth", ref y, "Smoothing", cm.Smoothing, 0f, 1f, "", "", percent: true);
+        }
         if (cm.Mode != CameraMode.FirstPerson && cm.Mode != CameraMode.HandCam)
             cm.PositionLag = SliderRow("oc.plag", ref y, "Position lag", cm.PositionLag, 0f, 1f, "", "", percent: true);
         if (cm.Mode != CameraMode.FirstPerson)

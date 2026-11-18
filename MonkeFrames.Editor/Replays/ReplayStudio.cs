@@ -86,7 +86,7 @@ public class ReplayStudio : MonoBehaviour
         CameraManager cm = CameraManager.Instance;
 
         bool want = Enabled && rm != null && rm.Viewing && rm.Clip != null && !rm.Recording
-            && ui != null && ui.Visible && cm != null && !cm.InPlayback && !cm.CinemachineState && KM != null;
+            && ui != null && ui.Drawing && cm != null && !cm.InPlayback && !cm.CinemachineState && KM != null;
 
         if (want != Active)
         {
@@ -137,8 +137,8 @@ public class ReplayStudio : MonoBehaviour
         UIManager ui = UIManager.Instance;
         foreach (var w in ui.Windows)
         {
-            if (w.Window.Name == "Player") { _hadPlayer = w.Visible; w.Visible = false; }
-            if (w.Window.Name == "Replays") { _hadReplays = w.Visible; w.Visible = false; }
+            if (w.Name == "Player") { _hadPlayer = w.Visible; w.Visible = false; }
+            if (w.Name == "Replays") { _hadReplays = w.Visible; w.Visible = false; }
         }
         _hash = int.MinValue;
         UIManager.Instance.Status = "Replay Studio: V adds a keyframe at the playhead, Space plays / pauses.";
@@ -160,8 +160,8 @@ public class ReplayStudio : MonoBehaviour
         if (ui != null)
             foreach (var w in ui.Windows)
             {
-                if (w.Window.Name == "Player" && _hadPlayer) w.Visible = true;
-                if (w.Window.Name == "Replays" && _hadReplays) w.Visible = true;
+                if (w.Name == "Player" && _hadPlayer) w.Visible = true;
+                if (w.Name == "Replays" && _hadReplays) w.Visible = true;
             }
         _hadPlayer = _hadReplays = false;
     }
@@ -190,6 +190,9 @@ public class ReplayStudio : MonoBehaviour
     private void HandleShortcuts(ReplayManager rm)
     {
         if (GUIUtility.keyboardControl != 0 || Keyboard.current == null)
+            return;
+        // the Advanced Keyframe Editor has the keyboard while the mouse is over it
+        if (Windows.AdvancedKeyframeEditor.CapturingKeys)
             return;
         var kb = Keyboard.current;
 
@@ -250,8 +253,7 @@ public class ReplayStudio : MonoBehaviour
     /// <summary>Add a keyframe from the current camera exactly at the replay playhead.</summary>
     public void AddKeyframeAtPlayhead()
     {
-        if (RM?.Clip == null) return;
-        if (!KM.CanEdit) return;
+        if (RM?.Clip == null || !KM.CanEdit) return;
         KM.RecordUndo();
         AddKeyframeAtPlayheadCore();
     }
@@ -335,8 +337,7 @@ public class ReplayStudio : MonoBehaviour
     /// <summary>Delete a keyframe without moving the others in time.</summary>
     public void DeleteKeyframe(int i)
     {
-        if (i < 0 || i >= Keys.Count || RM?.Clip == null) return;
-        if (!KM.CanEdit) return;
+        if (i < 0 || i >= Keys.Count || RM?.Clip == null || !KM.CanEdit) return;
         KM.RecordUndo();
         DeleteKeyframeCore(i);
     }
@@ -363,10 +364,9 @@ public class ReplayStudio : MonoBehaviour
     public void InsertPastedKeyframe(Keyframe keyframe)
     {
         ReplayManager rm = RM;
-        if (rm?.Clip == null) return;
-        if (!KM.CanEdit) return;
-        KM.RecordUndo();
+        if (rm?.Clip == null || !KM.CanEdit) return;
 
+        KM.RecordUndo();
         List<Keyframe> keys = Keys;
         int selection = UIManager.Instance.Selection;
         int insertAt = selection >= 0 && selection < keys.Count ? selection + 1 : keys.Count;
@@ -419,18 +419,9 @@ public class ReplayStudio : MonoBehaviour
         {
             h = 17 * 31 + p.FPS;
             h = h * 31 + p.Smoothness.GetHashCode();
-            foreach (Keyframe k in p.Keyframes)
-            {
-                h = h * 31 + k.Position.GetHashCode();
-                h = h * 31 + k.Rotation.GetHashCode();
-                h = h * 31 + k.FieldOfView.GetHashCode();
-                h = h * 31 + (int)k.Transition.Effect;
-                h = h * 31 + k.Transition.Duration.GetHashCode();
-                h = h * 31 + (k.MotionBlur ? 1 : 0);
-                h = h * 31 + k.Transition.CurveX1.GetHashCode() ^ k.Transition.CurveY1.GetHashCode();
-                h = h * 31 + k.Transition.CurveX2.GetHashCode() ^ k.Transition.CurveY2.GetHashCode();
-                h = h * 31 + (k.Transition.CustomSpeed ? 1 : 0);
-            }
+            h = h * 31 + (p.AutoSmooth ? 1 : 0);
+            h = h * 31 + p.AutoSmoothStrength.GetHashCode();
+            h = h * 31 + p.AnimationHash();
         }
         if (h == _hash) return;
         _hash = h;
@@ -492,6 +483,7 @@ public class ReplayStudio : MonoBehaviour
         cm.Position = k.Position;
         cm.Rotation = k.QuatRotation;
         cm.FieldOfView = k.FieldOfView;
+        PhotorealLink.KeyframeHour = k.TimeOfDay;
         cm.ExternalControl = true;
         _weSetExternal = true;
 
@@ -509,6 +501,7 @@ public class ReplayStudio : MonoBehaviour
             cm.ExternalControl = CameraModes.Instance != null && CameraModes.Instance.Mode != CameraMode.Free;
             cm.CancelLookSmoothing();
             _weSetExternal = false;
+            PhotorealLink.KeyframeHour = -1f;
         }
         if (_weSetBlur)
         {
@@ -763,8 +756,10 @@ public class ReplayStudio : MonoBehaviour
 
         float[] times = KeyTimes();
         Keyframe k = keys[sel];
-        var before = KM.BeginPropertyEdit();
         float x = b.x, w = b.width, y = b.y;
+
+        // A drag or typing in one field is one undo step.
+        Classes.KeyframeHistory.State before = KM.BeginPropertyEdit();
 
         Rect content = new Rect(0, 0, w - 14, 330);
         _inspectorScroll = GUI.BeginScrollView(new Rect(b.x, b.y, b.width, b.height), _inspectorScroll, content);
@@ -839,7 +834,7 @@ public class ReplayStudio : MonoBehaviour
         finally
         {
             GUI.EndScrollView();
-            KM.EndPropertyEdit(before, $"studio:{k.GUID}");
+            KM.EndPropertyEdit(before, "studio:" + k.GUID);
         }
     }
 
@@ -857,11 +852,10 @@ public class ReplayStudio : MonoBehaviour
     {
         int sel = UIManager.Instance.Selection;
         List<Keyframe> keys = Keys;
-        if (sel < 0 || sel >= keys.Count) return;
+        if (sel < 0 || sel >= keys.Count || !KM.CanEdit) return;
 
-        Keyframe old = keys[sel];
-        if (!KM.CanEdit) return;
         KM.RecordUndo();
+        Keyframe old = keys[sel];
         Keyframe k = KeyFromCamera();
         k.Transition = old.Transition;
         k.MotionBlur = old.MotionBlur;
@@ -1122,8 +1116,7 @@ public class ReplayStudio : MonoBehaviour
 
                 // Diamond hit?
                 float keysY = RowY(0) + rowH / 2f;
-                bool onPlayhead = Mathf.Abs(e.mousePosition.x - ToX(rm.Time)) <= 6f;
-                if ((!onPlayhead || e.alt) && Mathf.Abs(e.mousePosition.y - keysY) <= 8f)
+                if (Mathf.Abs(e.mousePosition.y - keysY) < rowH)
                 {
                     float best = 9f;
                     for (int i = 0; i < keys.Count; i++)
@@ -1170,9 +1163,9 @@ public class ReplayStudio : MonoBehaviour
             case EventType.MouseDrag when GUIUtility.hotControl == id:
                 if (_dragKey >= 0)
                 {
-                    if (!_dragMoved && Mathf.Abs(e.mousePosition.x - _dragStartX) > 5f)
+                    if (!_dragMoved && Mathf.Abs(e.mousePosition.x - _dragStartX) > 3f)
                     {
-                        KM.RecordUndo();
+                        KM.RecordUndo();   // the whole drag is one undo step
                         _dragMoved = true;
                     }
                     if (_dragMoved)
@@ -1238,7 +1231,7 @@ public class ReplayStudio : MonoBehaviour
         float fy = area.yMax + 6;
         string selText = sel >= 0 && sel < keys.Count ? $"[Keyframe {sel}]  {ReplayManager.FormatTime(times[sel])}" : $"{keys.Count} keyframes";
         GUI.Label(new Rect(b.x, fy, b.width, 20), selText + $"   ·   Frame {Mathf.RoundToInt((float)(rm.Time * clip.Rate))}", Theme.MutedSmall);
-        GUI.Label(new Rect(b.x, fy, b.width, 20), "Ctrl+Z undo · Alt-drag overlapping keys · wheel = zoom · , . = step", Theme.MutedRight);
+        GUI.Label(new Rect(b.x, fy, b.width, 20), "drag keys to retime · double-click = go to · wheel = zoom · , . = step", Theme.MutedRight);
     }
 
     private static void Export()

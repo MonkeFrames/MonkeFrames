@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using MonkeFrames.Editor.Attributes;
 using MonkeFrames.Editor.Interfaces;
 

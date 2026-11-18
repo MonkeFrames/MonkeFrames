@@ -3,12 +3,12 @@ using MonkeFrames.Editor.Interfaces;
 using MonkeFrames.Editor.UI;
 using UnityEngine;
 
-namespace MonkeFrames.Editor.Windows;
+namespace MonkeFrames.Editor.Windows.Project;
 
 public class ProjectSettings : IEditorWindow
 {
     public string Name => "Project Settings";
-    public Rect Rect => new Rect(140, 70, 500, 320);
+    public Rect Rect => new Rect(140, 70, 500, 400);
 
     public Compiler.Models.Project Project => KeyframeManager.Instance.Project;
 
@@ -49,6 +49,17 @@ public class ProjectSettings : IEditorWindow
         GUI.Label(new Rect(w - x - 44, y, 44, 24), Project.Smoothness.ToString("0.00"), Theme.LabelRight);
         y += 26;
         GUI.Label(new Rect(x + labelW, y, w - x * 2 - labelW, 20), "Applies to keyframes using the Smooth transition.", Theme.MutedSmall);
+        y += 30;
+
+        Project.AutoSmooth = Widgets.Switch("proj.autosmooth", new Rect(x, y, w - x * 2, 26), Project.AutoSmooth, "Auto smooth",
+            "Smooth curve through every keyframe with smoothed turning and zoom (no corners). Keyframes are still hit exactly and every transition keeps its own timing and custom speed graph.");
+        y += 32;
+        GUI.enabled = Project.AutoSmooth;
+        GUI.Label(new Rect(x, y, labelW, 24), new GUIContent("Auto smooth strength",
+            "0 = just rounds off the corners at keyframes. 1 = wide, sweeping curves through them."));
+        Project.AutoSmoothStrength = Widgets.Slider("proj.autosmooth.s", new Rect(x + labelW, y, w - x * 2 - labelW - 50, 24), Project.AutoSmoothStrength, 0f, 1f);
+        GUI.Label(new Rect(w - x - 44, y, 44, 24), $"{Project.AutoSmoothStrength * 100f:0}%", Theme.LabelRight);
+        GUI.enabled = true;
 
         string hint = string.IsNullOrEmpty(GUI.tooltip) ? "Recompile or press Refresh in the Player to see changes." : GUI.tooltip;
         Theme.Fill(new Rect(10, Rect.height - 36, w - 20, 26), Theme.Surface, 6);

@@ -21,6 +21,12 @@ public class MonkeFramesMenu : IEditorMenu
         UIManager.Instance.ToggleWindow("Settings");
     }
 
+    [EditorMenuItem("Play Intro")]
+    public void PlayIntro()
+    {
+        UI.IntroScreen.Replay();
+    }
+
     [EditorMenuItem("About MonkeFrames", Separator = true)]
     public void About()
     {

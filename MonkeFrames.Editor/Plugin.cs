@@ -5,41 +5,70 @@ using System;
 using System.Collections;
 using GorillaTagScripts.Subscription.AlarmClocks;
 using UnityEngine;
+using System.Threading.Tasks;
 using MonkeFrames.Extensions;
+using MonkeFrames.Editor.Utilities;
+
+
+
+
+#if DEBUG
+using System.Runtime.InteropServices;
+#endif
 
 namespace MonkeFrames.Editor;
 
 [BepInPlugin(Constants.Guid, Constants.Name, Constants.Version)]
 public class Plugin : BaseUnityPlugin
 {
-    private static Plugin instance;
-    private bool initializing, initialized;
+    private static Plugin _instance;
+    private bool _initializing, _initialized;
 
     public void Start()
     {
-        instance = this;
+        _instance = this;
         HarmonyLib.Harmony.CreateAndPatchAll(typeof(Plugin).Assembly, Constants.Guid);
         GorillaTagger.OnPlayerSpawned(OnPlayerSpawned);
     }
 
+    /// <summary>The game says the player spawned: set up once the rig (and the alarm clocks) are ready.</summary>
     public static void OnPlayerSpawned()
     {
-        if (instance == null || instance.initializing || instance.initialized) return;
-        instance.initializing = true;
-        instance.StartCoroutine(instance.InitializeAfterWakeUp());
+        // The callback can fire more than once; only ever initialise one editor.
+        if (_instance == null || _instance._initializing || _instance._initialized)
+            return;
+
+        _instance._initializing = true;
+        _instance.StartCoroutine(_instance.InitializeAfterWakeUp());
     }
 
     private IEnumerator InitializeAfterWakeUp()
     {
-        // The spawn callback can precede the alarm's input/teleport sequence. Do not
-        // activate/reconfigure its camera until the game has finished waking the player.
         yield return null;
-        while (GorillaTagger.Instance == null || GorillaTagger.Instance.offlineVRRig == null
-            || (AlarmClockManager.Instance != null && !AlarmClockManager.Instance.Initialized)
-            || (AlarmClockManager.Instance == null && !string.IsNullOrEmpty(PlayerPrefs.GetString("AlarmClock"))))
+
+        // Wait for the local rig, and for the game's alarm clocks to finish loading (if the player has any),
+        // so adding our components doesn't race the game's own start-up.
+        while (GorillaTagger.Instance == null || GorillaTagger.Instance.offlineVRRig == null || AlarmClocksLoading())
             yield return null;
-        try { InitializeEditor(); initialized = true; }
-        finally { initializing = false; }
+
+        try
+        {
+            InitializeEditor();
+            _initialized = true;
+        }
+        finally
+        {
+            _initializing = false;
+        }
+    }
+
+    private static bool AlarmClocksLoading()
+    {
+        AlarmClockManager clocks = AlarmClockManager.Instance;
+        if (clocks != null)
+            return !clocks.Initialized;
+        // No manager yet, but the player has alarm clocks saved: it's still coming.
+        return !string.IsNullOrEmpty(PlayerPrefs.GetString("AlarmClock"));
     }
 
     private static void InitializeEditor()
@@ -92,7 +121,8 @@ public class Plugin : BaseUnityPlugin
         }
 
         CameraManager.Instance.SetModEnabled(true);
-        CameraModes.Instance?.LoadSettings(Settings.current.Sources);
+        try { CameraModes.Instance?.LoadSettings(Settings.current.Sources); }
+        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Initialize] Couldn't restore the camera source: {ex.Message}"); }
     };
 
     public static Action OnMonkeFramesUnloaded = () =>
@@ -100,4 +130,41 @@ public class Plugin : BaseUnityPlugin
         Settings.Save();
         ExtensionManager.CallMethod("OnUnload");
     };
+
+#if DEBUG
+    Plugin()
+    {
+        AllocConsole();
+
+        Console.SetOut(new System.IO.StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+        Console.SetError(new System.IO.StreamWriter(Console.OpenStandardError()) { AutoFlush = true });
+
+        Console.Title = $"MonkeFrames {Constants.VersionID} (Build {Constants.BuildDate})";
+
+        Console.WriteLine($"MonkeFrames Debug Build {Constants.VersionID} (Build {Constants.BuildDate})");
+
+        Application.logMessageReceived += HandleLogMsg;
+
+        Application.quitting += () => {
+            Application.logMessageReceived -= HandleLogMsg;
+            FreeConsole();
+        };
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AllocConsole();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool FreeConsole();
+
+    private static void HandleLogMsg(string logString, string stackTrace, LogType type)
+    {
+        if (type == LogType.Exception && stackTrace.Contains("MonkeFrames"))
+        {
+            Console.Error.WriteLine("An unhandled exception occured.");
+            Console.Error.WriteLine($"Message:     {logString}");
+            Console.Error.WriteLine($"Stack Trace: {stackTrace}");
+        }
+    }
+#endif
 }

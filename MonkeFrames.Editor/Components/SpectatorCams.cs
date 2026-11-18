@@ -27,7 +27,7 @@ public class SpectatorCams : MonoBehaviour
     private const float Magic = 7719f;
     private const float SendInterval = 1f / 20f;
     private const double Delay = 0.11;           // interpolation delay (a little over two packets)
-    public const float ModelScale = 0.35f;
+    public const float ModelScale = 0.7f;
 
     internal sealed class Snap { public double Time; public Vector3 Pos; public Quaternion Rot; }
 
@@ -50,6 +50,15 @@ public class SpectatorCams : MonoBehaviour
         internal Vector3 SmoothPos;
         internal Quaternion SmoothRot = Quaternion.identity;
         internal readonly List<Snap> Snaps = new();
+        // VR grabbing (VRCamGrab): who holds it (0 nobody), whether its owner lets others grab it, and while I hold
+        // it in VR, where my hand has it (drawn there without waiting for the network)
+        public int HeldBy;
+        public bool Grabbable;
+        // whose head it's on in first person (0 nobody, -1 unknown: an older MonkeFrames that doesn't say)
+        public int OnHead;
+        public bool HeldLocally;
+        public Vector3 HoldPos;
+        public Quaternion HoldRot = Quaternion.identity;
         public Vector3 Position => Model != null ? Model.transform.position : Vector3.zero;
         public Quaternion Rotation => Model != null ? Model.transform.rotation : Quaternion.identity;
     }
@@ -85,6 +94,53 @@ public class SpectatorCams : MonoBehaviour
         _subscribed = true;
     }
 
+    /// <summary>My Photon actor number (0 when not in a room).</summary>
+    public static int MyActor()
+    {
+        try { return PhotonNetwork.InRoom && PhotonNetwork.LocalPlayer != null ? PhotonNetwork.LocalPlayer.ActorNumber : 0; }
+        catch { return 0; }
+    }
+
+    /// <summary>The live gorilla my camera is in first person on right now (null = none).</summary>
+    public static VRRig FirstPersonRig()
+    {
+        try
+        {
+            CameraModes m = CameraModes.Instance;
+            if (m == null || m.Mode == CameraMode.Free) return null;
+            CameraMode shot = m.Mode == CameraMode.Director ? m.DirectorShot : m.Mode;
+            if (shot != CameraMode.FirstPerson) return null;
+            return m.Target is LiveSubject ls && ls.Available ? ls.Rig : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Actor number of the gorilla my camera is in first person on (0 = none), sent with the camera.</summary>
+    public static int FirstPersonActor()
+    {
+        VRRig rig = FirstPersonRig();
+        if (rig == null) return 0;
+        if (rig.isOfflineVRRig) return MyActor();
+        try { NetPlayer owner = rig.Creator; return owner != null ? owner.ActorNumber : 0; }
+        catch { return 0; }
+    }
+
+    /// <summary>Someone's camera is in first person on MY head: hidden for me (it would fill my view), everyone
+    /// else still sees it. Older MonkeFrames versions don't say whose head it's on: then it's hidden when it sits
+    /// right at my head.</summary>
+    private static bool OnMyHead(RemoteCam rc)
+    {
+        int me = MyActor();
+        if (rc.OnHead > 0) return me != 0 && rc.OnHead == me;
+        if (rc.OnHead == 0 || rc.Snaps.Count == 0) return false;
+        try
+        {
+            Transform head = GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null ? GorillaTagger.Instance.headCollider.transform : null;
+            return head != null && (rc.Snaps[rc.Snaps.Count - 1].Pos - head.position).sqrMagnitude < 0.3f * 0.3f;
+        }
+        catch { return false; }
+    }
+
     /// <summary>True while your MonkeFrames camera is the one being used (free cam, Other Cameras, playback).</summary>
     public static bool LocalCameraActive
     {
@@ -104,9 +160,12 @@ public class SpectatorCams : MonoBehaviour
         if (!share && _sentHidden)
             return;
 
-        float[] data = new float[12];
+        float[] data = new float[15];
         data[0] = Magic;
-        data[1] = 2f; // version (2 adds a send timestamp)
+        data[1] = 4f; // version (2 adds a send timestamp, 3 who holds it in VR + whether others may grab it, 4 whose head it's on)
+        data[14] = share ? FirstPersonActor() : 0;
+        data[12] = VRCamGrab.Instance != null ? VRCamGrab.Instance.HeldByForSharing : 0;
+        data[13] = share && VRCamGrab.Instance != null && VRCamGrab.Instance.GrabbableForSharing ? 1f : 0f;
         data[11] = (float)(Time.realtimeSinceStartupAsDouble % 1000.0);
         if (share)
         {
@@ -149,6 +208,9 @@ public class SpectatorCams : MonoBehaviour
 
         rc.LastReceived = Time.unscaledTime;
         rc.Visible = d[10] > 0.5f;
+        rc.HeldBy = d.Length >= 14 ? (int)d[12] : 0;
+        rc.Grabbable = d.Length >= 14 && d[13] > 0.5f;
+        rc.OnHead = d.Length >= 15 ? (int)d[14] : -1;
         if (!rc.Visible)
         {
             rc.Snaps.Clear();
@@ -222,9 +284,35 @@ public class SpectatorCams : MonoBehaviour
     //  Frame loop
     // =====================================================================
 
+    private bool _lastTintLogo;
+
     private void Update()
     {
         Subscribe();
+
+        // Switched between the classic and the new camera model: rebuild every camera model.
+        if (CamModel.WantNew != CamModel.UsingNew && CamModel.Loaded)
+        {
+            CamModel.Reset();
+            foreach (RemoteCam r in _remote.Values)
+                if (r.Model != null) { Destroy(r.Model); r.Model = null; }
+            ReplayClip clip = ReplayManager.Instance?.Clip;
+            if (clip != null)
+                foreach (CamTrack c in clip.Cameras)
+                    if (c.Model != null) { Destroy(c.Model); c.Model = null; }
+        }
+
+        // Re-colour every camera model when the logo tint setting changes.
+        if (CamModel.TintLogo != _lastTintLogo)
+        {
+            _lastTintLogo = CamModel.TintLogo;
+            foreach (RemoteCam r in _remote.Values)
+                if (r.Model != null) CamModel.SetTint(r.Model, r.Color);
+            ReplayClip clip = ReplayManager.Instance?.Clip;
+            if (clip != null)
+                foreach (CamTrack c in clip.Cameras)
+                    if (c.Model != null) CamModel.SetTint(c.Model, c.Color);
+        }
 
         if (Time.unscaledTime >= _nextSend)
         {
@@ -257,12 +345,19 @@ public class SpectatorCams : MonoBehaviour
                     CamModel.SetTint(rc.Model, rc.Color);
             }
 
-            bool visible = show && rc.Visible && since < 2f && rc.Snaps.Count > 0;
+            bool visible = show && ((rc.Visible && since < 2f && rc.Snaps.Count > 0 && !OnMyHead(rc)) || rc.HeldLocally);
             if (visible && rc.Model == null)
                 rc.Model = CamModel.Create("MonkeFrames Camera: " + rc.Name, rc.Color, rc.Name);
             if (rc.Model != null && rc.Model.activeSelf != visible)
                 rc.Model.SetActive(visible);
-            if (visible)
+            if (visible && rc.HeldLocally)
+            {
+                // in my hand (VR): exactly where I hold it; carry on smoothly from there once I let go
+                rc.Model.transform.SetPositionAndRotation(rc.HoldPos, rc.HoldRot);
+                rc.SmoothPos = rc.HoldPos; rc.SmoothRot = rc.HoldRot; rc.HasSmoothed = true;
+                CamModel.FaceLabel(rc.Model);
+            }
+            else if (visible && rc.Snaps.Count > 0)
                 Interpolate(rc);
         }
 
@@ -370,6 +465,35 @@ public static class CamModel
     private static bool _loadFailed;
     private static TMP_FontAsset _font;
 
+    /// <summary>The new camera model (MonkeFrames 2.1 dev) is wanted instead of the classic one (Settings).</summary>
+    public static bool WantNew => Settings.current?.NewCameraModel ?? false;
+    /// <summary>Which model the loaded mesh / textures are.</summary>
+    public static bool UsingNew { get; private set; }
+    /// <summary>The model has been loaded (so switching models has something to rebuild).</summary>
+    public static bool Loaded => _mesh != null || _loadFailed || _texturesLoaded;
+    /// <summary>Bumped whenever the model is switched, so anything holding a model knows to rebuild it.</summary>
+    public static int Generation { get; private set; }
+
+    /// <summary>Forget the loaded model, textures and materials (the next Create loads the chosen model).</summary>
+    public static void Reset()
+    {
+        _mesh = null;
+        _loadFailed = false;
+        _texturesLoaded = false;
+        _albedo = null;
+        _rgb = null;
+        _materials.Clear();
+        _glowBuilt = false;
+        _glowTight = _glowWide = _glowTightCol = _glowWideCol = null;
+        _glowMeshInner = _glowMeshOuter = null;
+        _glowMats.Clear();
+        _logoColor = default;
+        Generation++;
+    }
+
+    /// <summary>World size of the body: the new model's OBJ is twice the size of the classic one.</summary>
+    private static float BodyScale => UsingNew ? SpectatorCams.ModelScale * 0.5f : SpectatorCams.ModelScale;
+
     /// <summary>True when the model has a real UV map, so the textures can be used.</summary>
     public static bool HasUVs;
 
@@ -387,7 +511,7 @@ public static class CamModel
         catch { return null; }
     }
 
-    private static Texture2D _albedo;
+    private static Texture2D _albedo, _rgb;
     private static bool _texturesLoaded;
     private static readonly Dictionary<Color32, Material> _materials = new();
 
@@ -411,8 +535,8 @@ public static class CamModel
             Texture2D t = new Texture2D(2, 2, TextureFormat.RGBA32, true);
             if (!t.LoadImage(bytes, false)) return null;
             t.wrapMode = TextureWrapMode.Clamp;
-            t.filterMode = FilterMode.Trilinear;
-            t.anisoLevel = 4;
+            t.filterMode = FilterMode.Point;
+            t.anisoLevel = 1;
             return t;
         }
         catch (Exception ex)
@@ -426,17 +550,25 @@ public static class CamModel
     /// Body material for a player colour. The glowing strips (RGB.png mask) take the gorilla's
     /// colour, both baked into the base texture and as emission, so they light up in that colour.
     /// </summary>
+    /// <summary>True when the logo/glow should take the player's gorilla colour instead of its own colours.</summary>
+    public static bool TintLogo => Settings.current?.TintCameraLogo ?? false;
+
     public static Material BodyMaterial(Color tint)
     {
         tint.a = 1f;
-        Color32 key = tint;
+        bool tintLogo = TintLogo;
+        Color32 key = tintLogo ? tint : new Color32(0, 0, 0, 0);
         if (_materials.TryGetValue(key, out Material cached) && cached != null)
             return cached;
 
         if (!_texturesLoaded)
         {
             _texturesLoaded = true;
-            _albedo = LoadTexture("Albedo.png", "spectatorCamTex");
+            bool useNew = WantNew;
+            _albedo = LoadTexture("Albedo.png", useNew ? "spectatorCamTex" : "camAlbedo");
+            // the new model has no glow mask (no glowing logo)
+            _rgb = useNew && CustomFile("RGB.png") == null ? null : LoadTexture("RGB.png", "camRGB");
+            Console.WriteLine($"[MonkeFrames::CamModel] Textures: albedo {(_albedo != null ? _albedo.width + "x" + _albedo.height : "missing")}, glow mask {(_rgb != null ? _rgb.width + "x" + _rgb.height : "missing")}");
         }
 
         Material m;
@@ -448,6 +580,33 @@ public static class CamModel
         else
         {
             Texture2D baseMap = _albedo;
+            if (_rgb != null && tintLogo)
+            {
+                // Bake the player colour into the logo.
+                Color32[] a = _albedo.GetPixels32();
+                int w = _albedo.width, h = _albedo.height;
+                bool same = _rgb.width == w && _rgb.height == h;
+                Color32[] mask = same ? _rgb.GetPixels32() : null;
+                Color32 tc = tint;
+                for (int i = 0; i < a.Length; i++)
+                {
+                    float k = same ? mask[i].r / 255f
+                        : _rgb.GetPixelBilinear((i % w + 0.5f) / w, (i / w + 0.5f) / h).r;
+                    if (k <= 0.01f) continue;
+                    k = Mathf.Clamp01(k * 1.6f);
+                    // Keep the logo's shading, swap its colour for the gorilla colour.
+                    Color32 src = a[i];
+                    float lum = Mathf.Max(src.r, Mathf.Max(src.g, src.b)) / 255f;
+                    Color32 shaded = new Color32((byte)(tc.r * lum), (byte)(tc.g * lum), (byte)(tc.b * lum), 255);
+                    a[i] = Color32.Lerp(src, shaded, k);
+                }
+                baseMap = new Texture2D(w, h, TextureFormat.RGBA32, true);
+                baseMap.SetPixels32(a);
+                baseMap.Apply(true, true);
+                baseMap.wrapMode = TextureWrapMode.Clamp;
+                baseMap.filterMode = FilterMode.Point;
+                baseMap.anisoLevel = 1;
+            }
 
             m = LitMaterial(Color.white);
             m.mainTexture = baseMap;
@@ -474,9 +633,18 @@ public static class CamModel
         if (mr != null)
             mr.sharedMaterial = BodyMaterial(tint);
 
+        Material[] glow = GlowMaterials(tint);
+        if (body != null && glow != null)
+        {
+            Transform inner = body.Find("Glow Inner"), outer = body.Find("Glow Outer");
+            if (inner != null) inner.GetComponent<MeshRenderer>().sharedMaterial = glow[0];
+            if (outer != null) outer.GetComponent<MeshRenderer>().sharedMaterial = glow[1];
+        }
         Light l = body != null ? body.GetComponentInChildren<Light>() : null;
-        if (l != null) l.color = tint;
+        if (l != null) l.color = LightColor(tint);
     }
+
+    private static Color LightColor(Color tint) => TintLogo || _logoColor.a <= 0f ? tint : _logoColor;
 
     public static Mesh Mesh
     {
@@ -484,22 +652,30 @@ public static class CamModel
         {
             if (_mesh == null && !_loadFailed)
             {
+                UsingNew = WantNew;
                 try
                 {
                     string custom = CustomFile("SpectatorCamera.obj");
-                    string text;
                     if (custom != null)
                     {
-                        text = File.ReadAllText(custom);
-                        Console.WriteLine($"[MonkeFrames::CamModel] Using custom model {custom}");
+                        _mesh = ObjToMesh(File.ReadAllText(custom), out HasUVs);
+                        Console.WriteLine($"[MonkeFrames::CamModel] Custom model {custom}: {_mesh.vertexCount} verts, UVs={HasUVs}");
+                        if (!HasUVs)
+                        {
+                            Console.WriteLine("[MonkeFrames::CamModel] Custom model has no UV map, using the built-in one instead.");
+                            _mesh = null;
+                        }
                     }
-                    else
+                    if (_mesh == null)
                     {
-                        using Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("spectatorCamObj");
+                        string resource = UsingNew ? "spectatorCamObj" : "spectatorCam";
+                        using Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource);
+                        if (s == null) throw new Exception($"embedded model resource '{resource}' is missing");
                         using StreamReader r = new StreamReader(s);
-                        text = r.ReadToEnd();
+                        string text = r.ReadToEnd();
+                        _mesh = ObjToMesh(text, out HasUVs);
+                        Console.WriteLine($"[MonkeFrames::CamModel] Built-in model: {_mesh.vertexCount} verts, UVs={HasUVs} ({(text.Length > 0 ? text.Split('\n')[0].Trim() : "empty")})");
                     }
-                    _mesh = ObjToMesh(text, out HasUVs);
                     _mesh.name = "MonkeFrames Spectator Camera";
                     if (!HasUVs)
                         Console.WriteLine("[MonkeFrames::CamModel] The camera model has no proper UV map, so it's drawn without its textures.");
@@ -524,10 +700,11 @@ public static class CamModel
         GameObject body = new GameObject("Body");
         body.layer = 0;
         body.transform.SetParent(root.transform, false);
-        body.transform.localRotation = Quaternion.Euler(0, 180, 0);
-        body.transform.localScale = Vector3.one * SpectatorCams.ModelScale;
+        Mesh mesh = Mesh; // loads the chosen model (sets UsingNew)
+        if (UsingNew)
+            body.transform.localRotation = Quaternion.Euler(0f, 180f, 0f); // the new model faces the other way
+        body.transform.localScale = Vector3.one * BodyScale;
 
-        Mesh mesh = Mesh;
         if (mesh != null)
         {
             body.AddComponent<MeshFilter>().sharedMesh = mesh;
@@ -549,8 +726,10 @@ public static class CamModel
         rec.name = "Rec Light";
         rec.layer = 0;
         rec.transform.SetParent(root.transform, false);
-        rec.transform.localPosition = new Vector3(0f, 0.2f * SpectatorCams.ModelScale, -0.02f);
-        rec.transform.localScale = Vector3.one * 0.035f;
+        rec.transform.localPosition = UsingNew
+            ? new Vector3(0f, 0.2f * BodyScale, -0.02f)
+            : new Vector3(0.11f, 0.245f, 0.12f) * SpectatorCams.ModelScale;
+        rec.transform.localScale = Vector3.one * (UsingNew ? 0.035f : 0.03f);
         rec.GetComponent<MeshRenderer>().sharedMaterial = MakeMaterial(new Color(1f, 0.15f, 0.15f), true);
         rec.AddComponent<Blink>();
 
@@ -561,7 +740,7 @@ public static class CamModel
             GameObject tag = new GameObject("Name");
             tag.layer = 0;
             tag.transform.SetParent(root.transform, false);
-            tag.transform.localPosition = new Vector3(0f, 0.32f, 0f);
+            tag.transform.localPosition = new Vector3(0f, 0.42f, 0f);
             TextMeshPro tmp = tag.AddComponent<TextMeshPro>();
             tmp.font = font;
             tmp.text = label;
@@ -612,7 +791,7 @@ public static class CamModel
     /// A matte material that's lit like everything else in Gorilla Tag: it copies the shader
     /// the gorillas themselves use (so it picks up the map's baked lighting), falling back to URP Lit.
     /// </summary>
-    private static Material LitMaterial(Color color)
+    internal static Material LitMaterial(Color color)
     {
         Material template = UberTemplate();
         Material m;
@@ -724,18 +903,68 @@ public static class CamModel
     }
 
     // ---------------- Glow ----------------
+
+    private static Texture2D _glowTight, _glowWide, _glowTightCol, _glowWideCol;
+    private static Color _logoColor;
     private static Mesh _glowMeshInner, _glowMeshOuter;
     private static bool _glowBuilt;
     private static readonly Dictionary<Color32, Material[]> _glowMats = new();
 
     /// <summary>Soft blurred copies of the RGB glow mask (white where it glows, alpha = strength).</summary>
-    private static Texture2D BlurredMask(Texture2D mask, int size, int radius, int passes)
+    /// <summary>
+    /// Soft blurred copy of the glow mask. With an albedo, the colour is the logo's own colour
+    /// (spread into the halo); without one it's white so it can be tinted.
+    /// </summary>
+    private static Texture2D BlurredMask(Texture2D mask, int size, int radius, int passes, Texture2D albedo = null)
     {
-        int sw = mask.width, sh = mask.height;
-        Color32[] src = mask.GetPixels32();
+        float[] a = Resample(mask, size, c => c.r / 255f);
+        Blur(a, size, radius, passes);
+
+        float max = 0.0001f;
+        foreach (float v in a) max = Mathf.Max(max, v);
+
+        float[] r = null, g = null, b = null;
+        if (albedo != null)
+        {
+            float[] m = Resample(mask, size, c => c.r / 255f);
+            float[] ar = Resample(albedo, size, c => c.r / 255f), ag = Resample(albedo, size, c => c.g / 255f), ab = Resample(albedo, size, c => c.b / 255f);
+            r = new float[m.Length]; g = new float[m.Length]; b = new float[m.Length];
+            for (int i = 0; i < m.Length; i++) { r[i] = ar[i] * m[i]; g[i] = ag[i] * m[i]; b[i] = ab[i] * m[i]; }
+            Blur(r, size, radius, passes); Blur(g, size, radius, passes); Blur(b, size, radius, passes);
+        }
+
+        Color32[] px = new Color32[a.Length];
+        for (int i = 0; i < a.Length; i++)
+        {
+            byte v = (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.Pow(a[i] / max, 0.8f) * 255f), 0, 255);
+            if (r == null)
+                px[i] = new Color32(v, v, v, v);
+            else
+            {
+                // Colour = average logo colour under the halo, boosted to full brightness.
+                float cr = r[i], cg = g[i], cb = b[i];
+                float cm = Mathf.Max(cr, Mathf.Max(cg, cb));
+                if (cm < 1e-5f) { cr = cg = cb = 1f; } else { cr /= cm; cg /= cm; cb /= cm; }
+                px[i] = new Color32((byte)(cr * 255f), (byte)(cg * 255f), (byte)(cb * 255f), v);
+            }
+        }
+        Texture2D t = new Texture2D(size, size, TextureFormat.RGBA32, true)
+        {
+            wrapMode = TextureWrapMode.Clamp,
+            filterMode = FilterMode.Trilinear,
+            name = "MonkeFrames Camera Glow",
+        };
+        t.SetPixels32(px);
+        t.Apply(true, false);   // stays readable: the glow shells are built by sampling it
+        return t;
+    }
+
+    private static float[] Resample(Texture2D tex, int size, Func<Color32, float> ch)
+    {
+        int sw = tex.width, sh = tex.height;
+        Color32[] src = tex.GetPixels32();
         float[] a = new float[size * size];
         int bx = Mathf.Max(1, sw / size), by = Mathf.Max(1, sh / size);
-
         for (int y = 0; y < size; y++)
         for (int x = 0; x < size; x++)
         {
@@ -744,12 +973,16 @@ public static class CamModel
             for (int yy = y0; yy < Mathf.Min(sh, y0 + by); yy += Mathf.Max(1, by / 4))
             for (int xx = x0; xx < Mathf.Min(sw, x0 + bx); xx += Mathf.Max(1, bx / 4))
             {
-                sum += src[yy * sw + xx].r / 255f;
+                sum += ch(src[yy * sw + xx]);
                 n++;
             }
             a[y * size + x] = n > 0 ? sum / n : 0f;
         }
+        return a;
+    }
 
+    private static void Blur(float[] a, int size, int radius, int passes)
+    {
         float[] tmp = new float[a.Length];
         for (int p = 0; p < passes; p++)
         {
@@ -779,24 +1012,6 @@ public static class CamModel
             }
         }
 
-        float max = 0.0001f;
-        foreach (float v in a) max = Mathf.Max(max, v);
-
-        Color32[] px = new Color32[a.Length];
-        for (int i = 0; i < a.Length; i++)
-        {
-            byte v = (byte)Mathf.Clamp(Mathf.RoundToInt(Mathf.Pow(a[i] / max, 0.8f) * 255f), 0, 255);
-            px[i] = new Color32(v, v, v, v);
-        }
-        Texture2D t = new Texture2D(size, size, TextureFormat.RGBA32, true)
-        {
-            wrapMode = TextureWrapMode.Clamp,
-            filterMode = FilterMode.Trilinear,
-            name = "MonkeFrames Camera Glow",
-        };
-        t.SetPixels32(px);
-        t.Apply(true, false);   // stays readable: the glow shells are built by sampling it
-        return t;
     }
 
     /// <summary>Copy of the faces that have glowing strips, pushed out along their normals.</summary>
@@ -883,10 +1098,18 @@ public static class CamModel
             {
                 Mesh bodyMesh = Mesh;
                 _ = BodyMaterial(tint); // loads the textures
-                if (bodyMesh != null && HasUVs)
+                if (bodyMesh != null && HasUVs && _rgb != null)
                 {
-                    _glowMeshInner = GlowShell(bodyMesh, null, 0.003f);
-                    _glowMeshOuter = GlowShell(bodyMesh, null, 0.014f);
+                    _glowTight = BlurredMask(_rgb, 256, 2, 2);
+                    _glowWide = BlurredMask(_rgb, 64, 3, 3);
+                    if (_albedo != null)
+                    {
+                        _glowTightCol = BlurredMask(_rgb, 256, 2, 2, _albedo);
+                        _glowWideCol = BlurredMask(_rgb, 64, 3, 3, _albedo);
+                        _logoColor = AverageLogoColor();
+                    }
+                    _glowMeshInner = GlowShell(bodyMesh, _glowWide, 0.003f);
+                    _glowMeshOuter = GlowShell(bodyMesh, _glowWide, 0.014f);
                 }
             }
             catch (Exception ex)
@@ -895,17 +1118,69 @@ public static class CamModel
             }
         }
 
+        Material[] mats = GlowMaterials(tint);
+        if (_glowMeshInner != null && mats != null)
+        {
+            Shell("Glow Inner", _glowMeshInner, mats[0]);
+            if (_glowMeshOuter != null)
+                Shell("Glow Outer", _glowMeshOuter, mats[1]);
+        }
+
         GameObject lightGo = new GameObject("Glow Light") { layer = 0 };
         lightGo.transform.SetParent(body.transform, false);
         Light l = lightGo.AddComponent<Light>();
         l.type = LightType.Point;
         l.range = 0.9f;
         l.intensity = 0.9f;
-        l.color = tint;
+        l.color = LightColor(tint);
         l.shadows = LightShadows.None;
+
+        void Shell(string name, Mesh mesh, Material mat)
+        {
+            GameObject g = new GameObject(name) { layer = 0 };
+            g.transform.SetParent(body.transform, false);
+            g.AddComponent<MeshFilter>().sharedMesh = mesh;
+            MeshRenderer r = g.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+        }
     }
 
-    private static Material MakeMaterial(Color color, bool unlit)
+    private static Material[] GlowMaterials(Color tint)
+    {
+        if (_glowTight == null || _glowWide == null) return null;
+        tint.a = 1f;
+        bool own = !TintLogo && _glowTightCol != null;
+        Color32 key = own ? new Color32(0, 0, 0, 0) : tint;
+        if (_glowMats.TryGetValue(key, out Material[] m) && m[0] != null)
+            return m;
+        m = own
+            ? new[] { GlowMaterial(Color.white, _glowTightCol, 1.1f), GlowMaterial(Color.white, _glowWideCol, 0.55f) }
+            : new[] { GlowMaterial(tint, _glowTight, 1.1f), GlowMaterial(tint, _glowWide, 0.55f) };
+        _glowMats[key] = m;
+        return m;
+    }
+
+    private static Color AverageLogoColor()
+    {
+        Color32[] a = _albedo.GetPixels32();
+        Color32[] m = _rgb.width == _albedo.width && _rgb.height == _albedo.height ? _rgb.GetPixels32() : null;
+        if (m == null) return new Color(0, 0, 0, 0);
+        double r = 0, g = 0, b = 0, n = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            float k = m[i].r / 255f;
+            if (k < 0.5f) continue;
+            r += a[i].r * k; g += a[i].g * k; b += a[i].b * k; n += k;
+        }
+        if (n < 1) return new Color(0, 0, 0, 0);
+        Color c = new Color((float)(r / n / 255), (float)(g / n / 255), (float)(b / n / 255), 1f);
+        float mx = Mathf.Max(c.r, Mathf.Max(c.g, c.b));
+        return mx > 0.001f ? new Color(c.r / mx, c.g / mx, c.b / mx, 1f) : c;
+    }
+
+    internal static Material MakeMaterial(Color color, bool unlit)
     {
         Shader sh = null;
         if (!unlit)
@@ -942,7 +1217,8 @@ public static class CamModel
             string line = raw.Trim();
             if (line.Length < 2) continue;
             string[] p = line.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
-
+            try
+            {
             switch (p[0])
             {
                 case "v":
@@ -996,6 +1272,8 @@ public static class CamModel
                     break;
                 }
             }
+            }
+            catch (Exception) { }   // a line we can't read (or a face pointing at a missing vertex) is skipped
         }
 
         Mesh mesh = new Mesh();
@@ -1009,7 +1287,7 @@ public static class CamModel
         var distinct = new HashSet<Vector2Int>();
         foreach (Vector2 uv in uvs)
             distinct.Add(new Vector2Int(Mathf.RoundToInt(uv.x * 512), Mathf.RoundToInt(uv.y * 512)));
-        hasUVs = tex.Count > 0 && distinct.Count > uvs.Count / 4;
+        hasUVs = tex.Count > 0 && distinct.Count >= 16;
         bool haveNormals = nrm.Count > 0;
         if (haveNormals) mesh.SetNormals(norms);
         else mesh.RecalculateNormals();

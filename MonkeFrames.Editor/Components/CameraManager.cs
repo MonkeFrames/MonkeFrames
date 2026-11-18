@@ -2,7 +2,6 @@ using GorillaNetworking;
 using MonkeFrames.Editor.Classes;
 using MonkeFrames.Editor.Replays;
 using MonkeFrames.Editor.Utilities;
-using MonkeFrames.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -81,8 +80,6 @@ public class CameraManager : MonoBehaviour
 
     private void LateUpdate()
     {
-        CompleteFfmpegExportIfReady();
-
         if (Keyboard.current.f1Key.wasPressedThisFrame && CinemachineState)
             SetModEnabled(true);
 
@@ -93,6 +90,7 @@ public class CameraManager : MonoBehaviour
 
         if (Camera == null)
             Camera = gameObject.GetComponent<Camera>();
+
 
         // Update values
         if (!Manual)
@@ -107,65 +105,97 @@ public class CameraManager : MonoBehaviour
                 Camera.fieldOfView = FieldOfView;
         }
 
+        FollowToNewMap();
+
         if (!InPlayback && !ExternalControl)
         {
-            float speed = 0.05f;
-
+            // Free cam: speed in metres per second (the same at any frame rate). Shift = fast, Ctrl = slow.
+            Settings st = Settings.current;
+            float dt = Mathf.Min(Time.unscaledDeltaTime, 0.1f);
+            bool typing = GUIUtility.keyboardControl != 0;
+            float speed = Mathf.Clamp(st?.CameraSpeed ?? 3f, 0.1f, 100f);
             if (Keyboard.current.shiftKey.isPressed)
-                speed = 0.25f;
-            if (Keyboard.current.ctrlKey.isPressed)
-                speed = 0.005f;
+                speed *= Mathf.Clamp(st?.CameraFastMultiplier ?? 4f, 1f, 25f);
+            else if (Keyboard.current.ctrlKey.isPressed)
+                speed *= Mathf.Clamp(st?.CameraSlowMultiplier ?? 0.2f, 0.02f, 1f);
 
-            // Check keybinds
-            if (Keyboard.current.wKey.isPressed)
-                Position += transform.forward * speed;
-
-            if (Keyboard.current.sKey.isPressed)
-                Position -= transform.forward * speed;
-
-            if (Keyboard.current.dKey.isPressed)
-                Position += transform.right * speed;
-
-            if (Keyboard.current.aKey.isPressed)
-                Position -= transform.right * speed;
-
-            if (Keyboard.current.eKey.isPressed)
-                Position += transform.up * speed;
-
-            if (Keyboard.current.qKey.isPressed)
-                Position -= transform.up * speed;
-
-            if (Keyboard.current.leftArrowKey.isPressed)
+            Vector3 input = Vector3.zero;
+            if (!typing)
             {
-                Vector3 eulers = Rotation.eulerAngles;
-                eulers.z -= speed;
-
-                Rotation = Quaternion.Euler(eulers);
+                if (Keyboard.current.wKey.isPressed) input += transform.forward;
+                if (Keyboard.current.sKey.isPressed) input -= transform.forward;
+                if (Keyboard.current.dKey.isPressed) input += transform.right;
+                if (Keyboard.current.aKey.isPressed) input -= transform.right;
+                if (Keyboard.current.eKey.isPressed) input += transform.up;
+                if (Keyboard.current.qKey.isPressed) input -= transform.up;
             }
+            Vector3 targetVel = input.sqrMagnitude > 1e-6f ? input.normalized * speed : Vector3.zero;
+            // smooth: glide up to speed and to a stop (~0.15 s); off: start and stop instantly
+            _moveVel = (st?.CameraSmoothMove ?? true)
+                ? Vector3.Lerp(_moveVel, targetVel, 1f - Mathf.Exp(-14f * dt))
+                : targetVel;
+            if (_moveVel.sqrMagnitude < 1e-8f) _moveVel = Vector3.zero;
+            Position += _moveVel * dt;
 
-            if (Keyboard.current.rightArrowKey.isPressed)
+            // Arrow keys: roll (degrees per second, also faster / slower with Shift / Ctrl). Same tilt as
+            // right-drag: sticks at level for a moment, and letting go close to level glides it level.
+            float rollSpeed = 40f * speed / Mathf.Clamp(st?.CameraSpeed ?? 3f, 0.1f, 100f) * dt;
+            int rollDir = typing ? 0 : (Keyboard.current.rightArrowKey.isPressed ? 1 : 0) - (Keyboard.current.leftArrowKey.isPressed ? 1 : 0);
+            if (rollDir != 0)
+                ArrowRoll(rollDir * rollSpeed);
+            else if (_arrowRolling)
             {
-                Vector3 eulers = Rotation.eulerAngles;
-                eulers.z += speed;
-
-                Rotation = Quaternion.Euler(eulers);
+                _arrowRolling = false;
+                LevelIfNearlyLevel();
             }
 
             UpdateFieldOfView();
 
             UpdateMouseLook();
         }
+        else _moveVel = Vector3.zero;
 
-        if (InPlayback && !Exporting && Keyboard.current.spaceKey.wasPressedThisFrame)
+        if (InPlayback && (Keyboard.current.spaceKey.wasPressedThisFrame || Keyboard.current.escapeKey.wasPressedThisFrame))
             StopPlayback();
     }
 
     Vector2 mousePos = new Vector2(0, 0);
 
+    // ---- Loading into another map: the free camera comes along ----
+    private Vector3 _lastPlayerPos;
+    private bool _havePlayerPos;
+
+    private void FollowToNewMap()
+    {
+        Transform head = null;
+        try { head = GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null ? GorillaTagger.Instance.headCollider.transform : null; } catch { }
+        if (head == null) { _havePlayerPos = false; return; }
+        Vector3 p = head.position;
+        bool jumped = _havePlayerPos && (p - _lastPlayerPos).sqrMagnitude > 40f * 40f;   // teleported, not moved
+        _lastPlayerPos = p; _havePlayerPos = true;
+        if (!jumped || InPlayback || ExternalControl || !(Settings.current?.CameraFollowToNewMap ?? true)) return;
+        // only if the camera was left behind (not when it's already near where you landed)
+        if ((Position - p).sqrMagnitude < 60f * 60f) return;
+        Vector3 fwd = Vector3.ProjectOnPlane(head.forward, Vector3.up);
+        if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+        fwd.Normalize();
+        CancelLookSmoothing();
+        Position = p - fwd * 2.2f + Vector3.up * 0.6f;
+        Vector3 look = p - Position;
+        Rotation = Quaternion.LookRotation(look.normalized, Vector3.up);
+        UIManager.Instance.Status = "New map: the camera came with you.";
+    }
+    private Vector3 _moveVel;           // free cam velocity (m/s), for smooth starts and stops
+
     // ---- Mouse look (with optional Caps Lock smoothing) ----
     private Vector2 _smoothedLook;
     private float _roll, _smoothedRoll;
+    private float _rawRoll;               // tilt before the "level" detent is applied
     private bool _looking, _tilting;
+    private bool _leveling;               // gliding back to a level horizon
+    private bool _arrowRolling;           // an arrow key is rolling the camera
+    private float _lastRightClick = -10f;
+    private Vector2 _rightClickPos;
     private bool _lookSettling;
 
     /// <summary>True while smoothed mouse look is still gliding to its target.</summary>
@@ -194,8 +224,28 @@ public class CameraManager : MonoBehaviour
         if (Mouse.current.leftButton.wasPressedThisFrame && !blocked) _looking = true;
         if (!Mouse.current.leftButton.isPressed) _looking = false;
 
-        if (Mouse.current.rightButton.wasPressedThisFrame && !blocked) _tilting = true;
+        bool rightPressed = Mouse.current.rightButton.wasPressedThisFrame && !blocked;
+        if (rightPressed) _tilting = true;
+        bool wasTilting = _tilting;
         if (!Mouse.current.rightButton.isPressed) _tilting = false;
+
+        // Double right-click = level the horizon.
+        if (rightPressed && (settings?.DoubleClickLevel ?? true))
+        {
+            Vector2 mp = Mouse.current.position.ReadValue();
+            if (Time.unscaledTime - _lastRightClick < 0.35f && (mp - _rightClickPos).sqrMagnitude < 400f)
+            {
+                StartLeveling();
+                _lastRightClick = -10f;
+                _tilting = false;
+                UIManager.Instance.Status = "Horizon levelled.";
+            }
+            else
+            {
+                _lastRightClick = Time.unscaledTime;
+                _rightClickPos = mp;
+            }
+        }
 
         bool dragging = _looking || _tilting;
         Cursor.lockState = dragging ? CursorLockMode.Locked : CursorLockMode.None;
@@ -211,15 +261,44 @@ public class CameraManager : MonoBehaviour
             float roll = e.z > 180f ? e.z - 360f : e.z;
             mousePos = new Vector2(e.y / 0.5f, -pitch / 0.5f);
             _roll = roll;
+            _rawRoll = roll + Mathf.Sign(roll) * (Mathf.Abs(roll) > 0.01f ? SnapAngle : 0f);
             _smoothedLook = mousePos;
             _smoothedRoll = _roll;
         }
+        if (_tilting) _leveling = false;
 
         Vector2 delta = Mouse.current.delta.ReadValue();
         if (_looking)
             mousePos += delta / 5f;
         if (_tilting)
-            _roll -= delta.x * 0.12f;
+        {
+            // Magnetic "level" detent: the horizon sticks at 0° until you tilt past the snap angle.
+            _rawRoll -= delta.x * 0.12f;
+            float snap = SnapAngle;
+            _roll = Mathf.Abs(_rawRoll) <= snap ? 0f : _rawRoll - Mathf.Sign(_rawRoll) * snap;
+        }
+
+        // Let go close to level: glide the rest of the way.
+        if (wasTilting && !_tilting && (settings?.AutoLevel ?? true)
+            && Mathf.Abs(_roll) > 0.001f && Mathf.Abs(_roll) < Mathf.Max(1f, settings?.AutoLevelAngle ?? 6f))
+            StartLeveling();
+
+        if (_leveling)
+        {
+            _roll = Mathf.Lerp(_roll, 0f, 1f - Mathf.Exp(-12f * Time.unscaledDeltaTime));
+            if (Mathf.Abs(_roll) < 0.02f) { _roll = 0f; _leveling = false; }
+            _rawRoll = _roll;
+            if (!dragging && !_lookSettling)
+            {
+                // straighten the camera around its own view axis (where it looks doesn't change)
+                Rotation = WithRoll(Rotation, _roll);
+                _smoothedRoll = _roll;
+                Vector3 e = Rotation.eulerAngles;
+                float pitch = e.x > 180f ? e.x - 360f : e.x;
+                mousePos = new Vector2(e.y / 0.5f, -pitch / 0.5f);
+                _smoothedLook = mousePos;
+            }
+        }
 
         bool smooth = settings?.SmoothMouseLook == true;
 
@@ -253,6 +332,58 @@ public class CameraManager : MonoBehaviour
                 Rotation = Quaternion.Euler(-mousePos.y * 0.5f, mousePos.x * 0.5f, _roll);
             }
         }
+    }
+
+    private static float SnapAngle =>
+        (Settings.current?.AutoLevel ?? true) ? Mathf.Clamp(Settings.current?.LevelSnapAngle ?? 3f, 0f, 15f) : 0f;
+
+    /// <summary>Glide the free camera's tilt back to a level horizon.</summary>
+    public void StartLeveling()
+    {
+        if (!_lookSettling) _roll = RollOf(Rotation);
+        _leveling = true;
+    }
+
+    /// <summary>Auto-level: if the tilt is within the level zone (Settings), glide it level.</summary>
+    public void LevelIfNearlyLevel()
+    {
+        Settings s = Settings.current;
+        if (!(s?.AutoLevel ?? true)) return;
+        float roll = _lookSettling ? _roll : RollOf(Rotation);
+        if (Mathf.Abs(roll) > 0.001f && Mathf.Abs(roll) < Mathf.Max(1f, s?.AutoLevelAngle ?? 6f))
+            StartLeveling();
+    }
+
+    /// <summary>The camera's tilt (degrees, -180..180): how far its up leans from the world's up, around its view.</summary>
+    private static float RollOf(Quaternion q)
+    {
+        Vector3 e = q.eulerAngles;
+        return e.z > 180f ? e.z - 360f : e.z;
+    }
+
+    /// <summary>Same view direction, with this much tilt.</summary>
+    private static Quaternion WithRoll(Quaternion q, float roll)
+    {
+        Vector3 e = q.eulerAngles;
+        return Quaternion.Euler(e.x, e.y, roll);
+    }
+
+    /// <summary>Roll from the arrow keys, through the same tilt state (and level detent) as right-drag.</summary>
+    private void ArrowRoll(float degrees)
+    {
+        if (!_arrowRolling)
+        {
+            _arrowRolling = true;
+            _leveling = false;
+            _roll = RollOf(_lookSettling ? Quaternion.Euler(0f, 0f, _roll) : Rotation);
+            _rawRoll = _roll + Mathf.Sign(_roll) * (Mathf.Abs(_roll) > 0.01f ? SnapAngle : 0f);
+        }
+        _rawRoll += degrees;
+        float snap = SnapAngle;
+        _roll = Mathf.Abs(_rawRoll) <= snap ? 0f : _rawRoll - Mathf.Sign(_rawRoll) * snap;
+        if (_lookSettling) return;            // the look smoothing carries _roll into the camera
+        Rotation = WithRoll(Rotation, _roll);
+        _smoothedRoll = _roll;
     }
 
     // ---- Scroll-wheel FOV (smoothed when Smooth Look is on) ----
@@ -335,26 +466,74 @@ public class CameraManager : MonoBehaviour
 
     public BinaryWriter frameStream;
     public Process ffmpegProcess;
+
+    /// <summary>Where the next export would go (never an existing file: "name 1.mp4", "name 2.mp4"...).</summary>
+    public string outputMp4 => ExportPaths.Next(Path.Combine(Constants.DataFolder, "exports"), KeyframeManager.Instance.Project.Name);
+    /// <summary>The file the current (or last) export writes, picked once when it starts.</summary>
+    private string exportMp4;
+    private string ffmpegLogPath => Path.Combine(Constants.DataFolder, "exports", "ffmpeg-log.txt");
+    private readonly System.Text.StringBuilder ffmpegLog = new();
+    private int exportWidth, exportHeight;
+
+    // Export audio (replay voices and / or the project's music track) and progress.
     private string exportAudioPath;
-    private string exportOutputPath;
-    private Task<string> ffmpegErrorTask;
-    private Task ffmpegProgressTask;
-    private Task<ExportResult> ffmpegWaitTask;
-    private int ffmpegProgressAmount;
     private int exportFrameCount;
+    private int ffmpegFramesDone;
+    private bool exportFinishing;
 
-    private sealed class ExportResult
-    {
-        public int ExitCode;
-        public string Error;
-    }
+    /// <summary>A video is being captured or ffmpeg is still finishing it.</summary>
+    public bool Exporting => doRecording || exportFinishing;
 
-    public bool Exporting => doRecording || ffmpegWaitTask != null;
+    /// <summary>0..1: frames captured while recording, then frames ffmpeg has encoded while it finishes.</summary>
     public float ExportProgress => doRecording
         ? (playbackEnding > 0 ? Mathf.Clamp01(playbackPosition / (float)playbackEnding) : 0f)
-        : Mathf.Clamp01(Interlocked.CompareExchange(ref ffmpegProgressAmount, 0, 0) / 1000f);
+        : (exportFrameCount > 0 ? Mathf.Clamp01(Interlocked.CompareExchange(ref ffmpegFramesDone, 0, 0) / (float)exportFrameCount) : 0f);
 
-    public string outputMp4 => ExportPaths.Next(Path.Combine(Constants.DataFolder, "exports"), KeyframeManager.Instance.Project.Name);
+    private void CleanupExportAudio()
+    {
+        if (string.IsNullOrEmpty(exportAudioPath)) return;
+        try { if (File.Exists(exportAudioPath)) File.Delete(exportAudioPath); }
+        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Export] Could not remove temporary audio: {ex.Message}"); }
+        exportAudioPath = null;
+    }
+
+    /// <summary>Stops a failed export cleanly: playback ends, the encoder is closed, and the reason is shown.</summary>
+    private void AbortExport(string reason)
+    {
+        Blur.Set(false, 0f);
+        PhotorealLink.KeyframeHour = -1f;
+        InPlayback = false;
+        doRecording = false;
+        UIManager.Instance.Drawing = true;
+        KeyframeManager.Instance.RefreshOrbs();
+        playbackPosition = 0;
+        try { frameStream?.Close(); } catch { }
+        frameStream = null;
+        try { if (ffmpegProcess != null && !ffmpegProcess.HasExited) ffmpegProcess.Kill(); } catch { }
+        try { ffmpegProcess?.Dispose(); } catch { }
+        ffmpegProcess = null;
+        if (renderTexture != null) { renderTexture.Release(); Destroy(renderTexture); renderTexture = null; }
+        exportFinishing = false;
+        CleanupExportAudio();
+        SaveFfmpegLog();
+        UIManager.Instance.Status = "Export failed: " + reason;
+        Console.WriteLine($"[MonkeFrames::Export] Failed: {reason}");
+        StopCoroutine("PlaybackCoroutine");
+    }
+
+    private void SaveFfmpegLog()
+    {
+        try { lock (ffmpegLog) File.WriteAllText(ffmpegLogPath, ffmpegLog.ToString()); } catch { }
+    }
+
+    private string LastFfmpegLine()
+    {
+        lock (ffmpegLog)
+        {
+            string[] lines = ffmpegLog.ToString().Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            return lines.Length > 0 ? lines[lines.Length - 1].Trim() : "";
+        }
+    }
 
     IEnumerator PlaybackCoroutine()
     {
@@ -367,6 +546,7 @@ public class CameraManager : MonoBehaviour
             if (playbackPosition >= playbackEnding - 1)
             {
                 Blur.Set(false, 0f);
+                PhotorealLink.KeyframeHour = -1f;
                 bool wasRecording = doRecording;
                 InPlayback = false;
                 UIManager.Instance.Drawing = true;
@@ -375,35 +555,80 @@ public class CameraManager : MonoBehaviour
                 doRecording = false;
 
                 // Plain playback (Project > Play) has no encoder to shut down.
+                // (this coroutine just ends; it isn't stopped from inside, which would cut the encoder's
+                // finishing step below off at its first wait)
                 if (!wasRecording)
                 {
                     UIManager.Instance.Status = "Playback finished.";
                     yield break;
                 }
 
-                UIManager.Instance.Status = "Encoding video...";
-                try { frameStream?.Close(); } catch { }
-                frameStream = null;
+                UIManager.Instance.Status = "Finishing encoding..";
+                exportFinishing = true;
 
-                renderTexture.Release();
-                Destroy(renderTexture);
-                renderTexture = null;
-                StartFfmpegCompletionTask();
+                try { frameStream.Flush(); frameStream.Close(); } catch { }
+                frameStream = null;
+                if (renderTexture != null) { renderTexture.Release(); Destroy(renderTexture); renderTexture = null; }
+
+                // Let ffmpeg finish the file without freezing the game. Long or high-FPS videos can take a
+                // while, so only give up once ffmpeg has stopped making progress for a whole minute.
+                float stalled = 0f;
+                int lastDone = -1;
+                while (ffmpegProcess != null && !ffmpegProcess.HasExited && stalled < 60f)
+                {
+                    int done = Interlocked.CompareExchange(ref ffmpegFramesDone, 0, 0);
+                    if (done != lastDone) { lastDone = done; stalled = 0f; }
+                    else stalled += Time.unscaledDeltaTime;
+                    yield return null;
+                }
+                int exit = -1;
+                try { if (ffmpegProcess != null && ffmpegProcess.HasExited) { ffmpegProcess.WaitForExit(); exit = ffmpegProcess.ExitCode; } else ffmpegProcess?.Kill(); } catch { }
+                try { ffmpegProcess?.Dispose(); } catch { }
+                ffmpegProcess = null;
+                exportFinishing = false;
+                CleanupExportAudio();
+                SaveFfmpegLog();
+
+                bool ok = exit == 0 && File.Exists(exportMp4) && new FileInfo(exportMp4).Length > 0;
+                if (!ok)
+                {
+                    string why = LastFfmpegLine();
+                    UIManager.Instance.Status = "Export failed" + (why.Length > 0 ? ": " + why : "") + " (details in exports\\ffmpeg-log.txt)";
+                    yield break;
+                }
+                try { Process.Start("explorer.exe", $"/select,\"{exportMp4}\""); } catch { }
+                UIManager.Instance.Status = $"Exported {exportMp4}";
                 yield break;
             }
 
             Keyframe currentFrame = kCache[playbackPosition];
 
-            foreach (FramesExtension extension in ExtensionManager.Plugins.Values)
-                extension.OnKeyframeStep(ref currentFrame);
-
+            foreach (MonkeFrames.Extensions.FramesExtension extension in MonkeFrames.Extensions.ExtensionManager.Plugins.Values)
+            {
+                try { extension.OnKeyframeStep(ref currentFrame); }
+                catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Extensions] OnKeyframeStep: {ex.Message}"); }
+            }
             Blur.Set(currentFrame.MotionBlur, currentFrame.MotionBlurStrength);
 
             Position = currentFrame.Position;
             Rotation = currentFrame.QuatRotation;
             FieldOfView = currentFrame.FieldOfView;
+            PhotorealLink.KeyframeHour = currentFrame.TimeOfDay;
 
             if (doRecording) {
+                // the window was resized: the capture no longer matches what ffmpeg expects
+                if (Screen.width != exportWidth || Screen.height != exportHeight)
+                {
+                    AbortExport("the game window changed size while exporting. Keep it the same size until it's done.");
+                    yield break;
+                }
+                if (ffmpegProcess == null || ffmpegProcess.HasExited)
+                {
+                    string why = LastFfmpegLine();
+                    AbortExport("ffmpeg stopped" + (why.Length > 0 ? ": " + why : "") + " (details in exports\\ffmpeg-log.txt)");
+                    yield break;
+                }
+
                 ScreenCapture.CaptureScreenshotIntoRenderTexture(renderTexture);
 
                 var request = AsyncGPUReadback.Request(renderTexture, 0, TextureFormat.RGBA32);
@@ -417,22 +642,19 @@ public class CameraManager : MonoBehaviour
                 var nativeArray = request.GetData<byte>();
                 nativeArray.CopyTo(rBuffer);
 
-                Exception pipeFailure = null;
+                bool written = true;
                 try
                 {
                     frameStream.Write(rBuffer, 0, rBuffer.Length);
+                    frameStream.Flush();
                 }
-                catch (IOException ex)
+                catch (Exception ex) { written = false; Console.WriteLine($"[MonkeFrames::Export] Writing a frame failed: {ex.Message}"); }
+                if (!written)
                 {
-                    pipeFailure = ex;
-                }
-
-                if (pipeFailure != null)
-                {
-                    HandleFfmpegFailure(pipeFailure);
+                    string why = LastFfmpegLine();
+                    AbortExport("ffmpeg stopped taking frames" + (why.Length > 0 ? ": " + why : "") + " (details in exports\\ffmpeg-log.txt)");
                     yield break;
                 }
-
             }
             
             if (doRecording)
@@ -456,228 +678,142 @@ public class CameraManager : MonoBehaviour
 
     public void StartRecording()
     {
-        if (Exporting || InPlayback) return;
-        if ((KeyframeManager.Instance.Project.CompiledKeyframes?.Count ?? 0) == 0)
+        if (Exporting)
         {
-            UIManager.Instance.Status = "Add keyframes before exporting.";
+            UIManager.Instance.Status = "A video is still being built - wait for it to finish.";
             return;
         }
-        renderTexture = new RenderTexture(Screen.width, Screen.height, 24);
-        rBuffer = new byte[Screen.width * Screen.height * 4];
-        exportFrameCount = KeyframeManager.Instance.Project.CompiledKeyframes.Count;
-        Interlocked.Exchange(ref ffmpegProgressAmount, 0);
-
-        Task.Run(() =>
+        if (InPlayback)
         {
-            FramesExtension.ShowMessageBox(
-                $"[MonkeFrames {Constants.Version}] Encoding",
-                "Your video is encoding. Please wait for the UI to reappear before continuing work.",
-                icon: FramesExtension.MessageBoxIcon.Asterisk);
-        });
+            UIManager.Instance.Status = "Already playing or exporting - wait for it to finish (Esc stops playback).";
+            return;
+        }
+        string ffmpeg = HEncodeUtilities.FindFfmpeg(out string problem);
+        if (ffmpeg == null)
+        {
+            UIManager.Instance.Status = "Can't export: " + problem;
+            Console.WriteLine($"[MonkeFrames::Export] {problem}");
+            return;
+        }
+        if (KeyframeManager.Instance.Project.CompiledKeyframes == null || KeyframeManager.Instance.Project.CompiledKeyframes.Count < 2)
+        {
+            UIManager.Instance.Status = "Can't export: add at least two keyframes (and compile) first.";
+            return;
+        }
 
-        try { StartFfmpegEncoder(); }
-        catch (Exception ex) { HandleFfmpegFailure(ex); return; }
+        exportWidth = Screen.width;
+        exportHeight = Screen.height;
+        renderTexture = new RenderTexture(exportWidth, exportHeight, 24);
+        rBuffer = new byte[exportWidth * exportHeight * 4];
+
+        try { StartFfmpegEncoder(ffmpeg); }
+        catch (Exception ex)
+        {
+            renderTexture.Release(); Destroy(renderTexture); renderTexture = null;
+            UIManager.Instance.Status = "Can't export: ffmpeg didn't start (" + ex.Message + ")";
+            Console.WriteLine($"[MonkeFrames::Export] ffmpeg didn't start: {ex}");
+            return;
+        }
         doRecording = true;
         StartPlayback();
     }
 
-    public void StartFfmpegEncoder()
+    public void StartFfmpegEncoder(string ffmpeg)
     {
         var project = KeyframeManager.Instance.Project;
-        exportOutputPath = outputMp4;
-        Directory.CreateDirectory(Path.GetDirectoryName(exportOutputPath));
-        bool hasVoiceAudio = false;
+        exportMp4 = outputMp4;   // picked once: the whole export uses this file
+        Directory.CreateDirectory(Path.GetDirectoryName(exportMp4));
+
+        string encoder = HEncodeUtilities.GetGoodEncoder(ffmpeg);
+        exportFrameCount = project.CompiledKeyframes.Count;
+        Interlocked.Exchange(ref ffmpegFramesDone, 0);
+
+        // Replay voices (when a replay is following the keyframes) are mixed into a temporary WAV.
+        CleanupExportAudio();
+        bool hasVoice = false;
         ReplayManager replay = ReplayManager.Instance;
-        if (replay != null && replay.Viewing && replay.SyncWithKeyframes
-            && ReplayVoiceExporter.HasAudibleVoice(replay.Clip))
+        if (replay != null && replay.Viewing && replay.SyncWithKeyframes && ReplayVoiceExporter.HasAudibleVoice(replay.Clip))
         {
             try
             {
                 exportAudioPath = Path.Combine(Path.GetTempPath(), $"MonkeFrames-voice-{Guid.NewGuid():N}.wav");
-                ReplayVoiceExporter.WriteWav(exportAudioPath, replay.Clip,
-                    project.CompiledKeyframes.Count, project.FPS, replay.Speed, replay.VoiceVolume);
-                hasVoiceAudio = true;
+                ReplayVoiceExporter.WriteWav(exportAudioPath, replay.Clip, exportFrameCount, project.FPS, replay.Speed, replay.VoiceVolume);
+                hasVoice = true;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[MonkeFrames::Export] Could not prepare replay voice audio: {ex}");
                 CleanupExportAudio();
-                UIManager.Instance.Status = "Replay audio could not be prepared; exporting video without audio.";
             }
         }
+        // The project's music track (Player window), starting at its start time.
+        bool hasMusic = !string.IsNullOrEmpty(project.AudioPath) && File.Exists(project.AudioPath);
+        string musicStart = Mathf.Max(0f, project.AudioStartTime).ToString("0.000", CultureInfo.InvariantCulture);
 
-        bool hasMusicAudio = !string.IsNullOrEmpty(project.AudioPath) && File.Exists(project.AudioPath);
-
-        Console.WriteLine("==== FFMPEG ENCODE STATS ====");
-
-        string arguments;
-        if (hasVoiceAudio && hasMusicAudio)
+        // raw RGBA frames in; H.264 out. The window can be an odd number of pixels wide / tall, which H.264
+        // can't store, so one row / column is cropped off then. Options go before the output file (after it,
+        // ffmpeg ignores them)
+        const string crop = "crop=trunc(iw/2)*2:trunc(ih/2)*2";
+        string inputs = $"-hide_banner -loglevel error -f rawvideo -pix_fmt rgba -s {exportWidth}x{exportHeight} -r {project.FPS} -i - ";
+        string mapping;
+        if (hasVoice && hasMusic)
         {
-            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
-                        $"-i \"{exportAudioPath}\" -ss {project.AudioStartTime:0.00} -i \"{project.AudioPath}\" " +
-                        $"-filter_complex \"[1:a][2:a]amix=inputs=2:duration=first[aout]\" -map 0:v -map \"[aout]\" " +
-                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
-                        $"-c:a aac -b:a 192k -shortest " +
-                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-n \"{exportOutputPath}\"";
+            inputs += $"-i \"{exportAudioPath}\" -ss {musicStart} -i \"{project.AudioPath}\" ";
+            mapping = $"-filter_complex \"[0:v]{crop}[v];[1:a][2:a]amix=inputs=2:duration=first:normalize=0[a]\" -map \"[v]\" -map \"[a]\" ";
         }
-        else if (hasVoiceAudio)
+        else if (hasVoice)
         {
-            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
-                        $"-i \"{exportAudioPath}\" " +
-                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
-                        $"-c:a aac -b:a 192k -shortest " +
-                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-n \"{exportOutputPath}\"";
+            inputs += $"-i \"{exportAudioPath}\" ";
+            mapping = $"-vf \"{crop}\" -map 0:v -map 1:a ";
         }
-        else if (hasMusicAudio)
+        else if (hasMusic)
         {
-            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
-                        $"-ss {project.AudioStartTime:0.00} -i \"{project.AudioPath}\" " +
-                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
-                        $"-c:a aac -b:a 192k -shortest " +
-                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-n \"{exportOutputPath}\"";
+            // Music shorter than the video is padded with silence so the video is never cut short.
+            inputs += $"-ss {musicStart} -i \"{project.AudioPath}\" ";
+            mapping = $"-vf \"{crop}\" -af apad -map 0:v -map 1:a ";
         }
         else
-        {
-            arguments = $"-loglevel error -f rawvideo -pix_fmt rgba -s {Screen.width}x{Screen.height} -r {project.FPS} -i - " +
-                        $"-c:v libx264 -pix_fmt yuv420p -preset ultrafast -crf 28 " +
-                        $"-progress pipe:1 -stats_period 0.25 -nostats " +
-                        $"-n \"{exportOutputPath}\"";
-        }
+            mapping = $"-vf \"{crop}\" ";
+        string audio = hasVoice || hasMusic ? "-c:a aac -b:a 192k -shortest " : "";
+        string arguments = inputs + mapping + $"-c:v {encoder} {HEncodeUtilities.QualityArgs(encoder)} -pix_fmt yuv420p " + audio +
+                           $"-movflags +faststart -stats_period 0.25 -progress pipe:1 -nostats -y \"{exportMp4}\"";
+        if (hasVoice || hasMusic)
+            Console.WriteLine($"[MonkeFrames::Export] audio: {(hasVoice ? "replay voices" : "")}{(hasVoice && hasMusic ? " + " : "")}{(hasMusic ? project.AudioPath : "")}");
 
-        Console.WriteLine($"Arguments: {arguments}");
+        Console.WriteLine($"[MonkeFrames::Export] ffmpeg {ffmpeg}");
+        Console.WriteLine($"[MonkeFrames::Export] encoder {encoder} (GPU {SystemInfo.graphicsDeviceName}), {exportWidth}x{exportHeight} @ {project.FPS} fps");
+        Console.WriteLine($"[MonkeFrames::Export] arguments {arguments}");
 
-        Console.WriteLine("==== OK I'M DONE ====");
-
+        lock (ffmpegLog) { ffmpegLog.Clear(); ffmpegLog.AppendLine($"ffmpeg {ffmpeg}"); ffmpegLog.AppendLine($"arguments {arguments}"); }
         ffmpegProcess = Process.Start(new ProcessStartInfo
         {
-            FileName = Path.Combine(Constants.MonkeFramesAssemblyFolder, "ffmpeg.exe"),
+            FileName = ffmpeg,
             Arguments = arguments,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardInput = true,
             RedirectStandardError = true,
-            RedirectStandardOutput = true
+            RedirectStandardOutput = true,
         });
-
-        ffmpegErrorTask = ffmpegProcess.StandardError.ReadToEndAsync();
-        ffmpegProgressTask = Task.Run(() => ReadFfmpegProgress(ffmpegProcess));
+        if (ffmpegProcess == null) throw new Exception("no process");
+        // what ffmpeg says (errors), kept for the log and the status line
+        ffmpegProcess.ErrorDataReceived += (_, e) => { if (e.Data != null) lock (ffmpegLog) ffmpegLog.AppendLine(e.Data); };
+        ffmpegProcess.BeginErrorReadLine();
+        // -progress pipe:1 reports "frame=N" as it encodes (drives the BUILDING VIDEO bar)
+        ffmpegProcess.OutputDataReceived += (_, e) =>
+        {
+            string line = e.Data;
+            if (line != null && line.StartsWith("frame=", StringComparison.Ordinal)
+                && int.TryParse(line.Substring(6).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int frame))
+                Interlocked.Exchange(ref ffmpegFramesDone, frame);
+        };
+        ffmpegProcess.BeginOutputReadLine();
 
         frameStream = new BinaryWriter(ffmpegProcess.StandardInput.BaseStream);
     }
 
-    private void ReadFfmpegProgress(Process process)
-    {
-        string line;
-        while ((line = process.StandardOutput.ReadLine()) != null)
-        {
-            if (line.StartsWith("frame=", StringComparison.Ordinal)
-                && int.TryParse(line.Substring(6).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int frame))
-            {
-                int progressInt = exportFrameCount > 0
-                    ? (int)Math.Round(frame * 1000d / exportFrameCount)
-                    : 0;
-                Interlocked.Exchange(ref ffmpegProgressAmount, Math.Max(0, Math.Min(999, progressInt)));
-            }
-        }
-    }
-
-    private void StartFfmpegCompletionTask()
-    {
-        Process process = ffmpegProcess;
-        Task<string> errorTask = ffmpegErrorTask;
-        Task progressTask = ffmpegProgressTask;
-        ffmpegWaitTask = Task.Run(() =>
-        {
-            process.WaitForExit();
-            progressTask?.GetAwaiter().GetResult();
-            string error = errorTask?.GetAwaiter().GetResult() ?? "";
-            return new ExportResult
-            {
-                ExitCode = !string.IsNullOrWhiteSpace(error) ? -1 : process.ExitCode,
-                Error = error
-            };
-        });
-    }
-
-    private void CompleteFfmpegExportIfReady()
-    {
-        Task<ExportResult> task = ffmpegWaitTask;
-        if (task == null || !task.IsCompleted) return;
-
-        ExportResult result = null;
-        try { result = task.GetAwaiter().GetResult(); }
-        catch (Exception ex) { result = new ExportResult { ExitCode = -1, Error = ex.Message }; }
-
-        ffmpegWaitTask = null;
-        try { ffmpegProcess?.Dispose(); } catch { }
-        ffmpegProcess = null;
-        ffmpegErrorTask = null;
-        ffmpegProgressTask = null;
-        CleanupExportAudio();
-        Interlocked.Exchange(ref ffmpegProgressAmount, 1000);
-        string path = exportOutputPath;
-        exportOutputPath = null;
-
-        if (result.ExitCode != 0)
-        {
-            UIManager.Instance.Status = "MP4 export failed: " + (string.IsNullOrWhiteSpace(result.Error)
-                ? $"ffmpeg exited with code {result.ExitCode}."
-                : result.Error.Trim());
-            return;
-        }
-
-        try { Process.Start("explorer.exe", $"/select,\"{path}\""); }
-        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Export] Could not open exported video location: {ex.Message}"); }
-        UIManager.Instance.Status = $"Exported {path}";
-    }
-
-    private void CleanupExportAudio()
-    {
-        if (string.IsNullOrEmpty(exportAudioPath)) return;
-        try { if (File.Exists(exportAudioPath)) File.Delete(exportAudioPath); }
-        catch (Exception ex) { Console.WriteLine($"[MonkeFrames::Export] Could not remove temporary audio: {ex.Message}"); }
-        exportAudioPath = null;
-    }
-
-    private void HandleFfmpegFailure(Exception cause)
-    {
-        try { frameStream?.Close(); } catch { }
-        frameStream = null;
-        Process process = ffmpegProcess;
-        Task<string> errorTask = ffmpegErrorTask;
-        Task progressTask = ffmpegProgressTask;
-        try { process?.Kill(); } catch { }
-        ffmpegWaitTask = Task.Run(() =>
-        {
-            try { process?.WaitForExit(); } catch { }
-            try { progressTask?.GetAwaiter().GetResult(); } catch { }
-            string details = "";
-            try { details = errorTask?.GetAwaiter().GetResult() ?? ""; } catch { }
-            return new ExportResult { ExitCode = -1, Error = string.IsNullOrWhiteSpace(details) ? cause.Message : details.Trim() };
-        });
-
-        if (renderTexture != null)
-        {
-            renderTexture.Release();
-            Destroy(renderTexture);
-            renderTexture = null;
-        }
-
-        InPlayback = false;
-        doRecording = false;
-        playbackPosition = 0;
-        Blur.Set(false, 0f);
-        UIManager.Instance.Drawing = true;
-        KeyframeManager.Instance.RefreshOrbs();
-        UIManager.Instance.Status = "MP4 export failed: " + cause.Message;
-    }
-
     public void StartPlayback()
     {
-        if (InPlayback || (!doRecording && Exporting)) return;
         kCache = KeyframeManager.Instance.Project.CompiledKeyframes;
         InPlayback = true;
         UIManager.Instance.Drawing = false;
@@ -691,8 +827,8 @@ public class CameraManager : MonoBehaviour
 
     public void StopPlayback()
     {
-        if (Exporting) return;
         Blur.Set(false, 0f);
+        PhotorealLink.KeyframeHour = -1f;
         InPlayback = false;
         UIManager.Instance.Drawing = true;
         KeyframeManager.Instance.RefreshOrbs();

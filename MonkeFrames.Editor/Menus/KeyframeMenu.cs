@@ -7,7 +7,7 @@ namespace MonkeFrames.Editor.Menus;
 public class KeyframeMenu : IEditorMenu
 {
     public string Name => "Keyframe";
-    public int Index => 4;
+    public int Index => 6;
 
     [EditorMenuItem("New", Shortcut = "V")]
     public void NewKeyframe()
@@ -42,6 +42,6 @@ public class KeyframeMenu : IEditorMenu
             return;
         }
 
-        KeyframeManager.Instance.DeleteKeyframe(UIManager.Instance.Selection);
+        KeyframeManager.Instance.DeleteSelection();
     }
 }

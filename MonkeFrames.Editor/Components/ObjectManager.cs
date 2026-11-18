@@ -118,6 +118,15 @@ public class ObjectManager : MonoBehaviour
             if (mesh != null && mesh.vertexCount > 0)
             {
                 mesh.name = objFileName;
+                // The object's handle (pivot) is the middle of the model, wherever the file put it.
+                Vector3 c = mesh.bounds.center;
+                if (c.sqrMagnitude > 1e-8f)
+                {
+                    Vector3[] v = mesh.vertices;
+                    for (int i = 0; i < v.Length; i++) v[i] -= c;
+                    mesh.vertices = v;
+                    mesh.RecalculateBounds();
+                }
                 _meshCache[objFileName] = mesh;
                 return mesh;
             }
@@ -132,7 +141,7 @@ public class ObjectManager : MonoBehaviour
         }
     }
 
-    public (bool, Texture2D) TryLoadObjectTexture(string objFileName)
+    public (bool, Texture2D?) TryLoadObjectTexture(string objFileName)
     {
         string baseName = Path.GetFileNameWithoutExtension(objFileName);
         string folder = ObjectsFolder;
@@ -226,14 +235,10 @@ public class ObjectManager : MonoBehaviour
 
         MeshRenderer mr = go.AddComponent<MeshRenderer>();
 
-        Shader shader = Shader.Find("Standard")
-            ?? Shader.Find("GorillaTag/UberShader")
-            ?? Shader.Find("Universal Render Pipeline/Unlit")
-            ?? Shader.Find("Unlit/Texture");
-
-        Material mat = new Material(shader);
-        mat.color = Color.white;
-        if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", Color.white);
+        // Lit exactly like Gorilla Tag's own props (its shader); "Standard" isn't in the game and drew nothing
+        Material mat = CamModel.LitMaterial(Color.white);
+        mat.name = "MonkeFrames Object: " + objFileName;
+        if (mat.HasProperty("_Cull")) mat.SetFloat("_Cull", 0f);   // both sides: models with flipped faces still show
 
         // Try to load texture via .mtl file or matching image file (.png/.jpg)
         var textureLoadResult = TryLoadObjectTexture(objFileName);
@@ -246,12 +251,37 @@ public class ObjectManager : MonoBehaviour
             if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", tex);
             if (mat.HasProperty("_Tex")) mat.SetTexture("_Tex", tex);
         }
+        else
+        {
+            // no texture of its own: plain white (not the borrowed game material's texture)
+            mat.mainTexture = Texture2D.whiteTexture;
+            if (mat.HasProperty("_MainTex")) mat.SetTexture("_MainTex", Texture2D.whiteTexture);
+            if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", Texture2D.whiteTexture);
+        }
 
         mr.sharedMaterial = mat;
 
-        Vector3 pos = initialPos ?? (existingData != null ? existingData.Position : (CameraManager.Instance != null ? CameraManager.Instance.Position : Vector3.zero));
         Vector3 rotVec = initialRot ?? (existingData != null ? existingData.Rotation : Vector3.zero);
         Vector3 scale = initialScale ?? (existingData != null ? existingData.Scale : Vector3.one);
+        float size = mesh.bounds.size.magnitude;
+        string sizeNote = "";
+        if (initialScale == null && existingData == null && size > 0f)
+        {
+            // models exported in centimetres (huge) or far too small: brought to a size you can see
+            if (size > 40f) { scale = Vector3.one * (2f / size); sizeNote = " (it was huge, scaled down)"; }
+            else if (size < 0.05f) { scale = Vector3.one * (0.5f / size); sizeNote = " (it was tiny, scaled up)"; }
+        }
+        // A new object appears in front of the camera (at the camera it'd be all around you, so you'd see nothing)
+        Vector3 pos;
+        if (initialPos != null) pos = initialPos.Value;
+        else if (existingData != null) pos = existingData.Position;
+        else
+        {
+            Transform view = CameraManager.Instance != null && CameraManager.Instance.Camera != null ? CameraManager.Instance.Camera.transform
+                : GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null ? GorillaTagger.Instance.headCollider.transform : null;
+            float dist = Mathf.Clamp(size * scale.x * 1.2f + 0.6f, 1.2f, 30f);
+            pos = view != null ? view.position + view.forward * dist : Vector3.zero;
+        }
 
         go.transform.position = pos;
         go.transform.rotation = Quaternion.Euler(rotVec);
@@ -303,7 +333,8 @@ public class ObjectManager : MonoBehaviour
         SelectedIndex = SpawnedObjects.Count - 1;
         UpdateSelectionVisuals();
 
-        UIManager.Instance.Status = $"Spawned object '{objFileName}'.";
+        if (existingData == null)
+            UIManager.Instance.Status = $"Spawned '{objFileName}' in front of the camera{sizeNote}. Press L to bring it in front of the camera again.";
         return inst;
     }
 
@@ -421,11 +452,12 @@ public class ObjectManager : MonoBehaviour
         if (sel == null || sel.GameObject == null)
             return;
 
-        Vector3 camPos = CameraManager.Instance != null && CameraManager.Instance.Camera != null
-            ? CameraManager.Instance.Camera.transform.position
-            : (GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null
-                ? GorillaTagger.Instance.headCollider.transform.position
-                : Vector3.zero);
+        // just in front of the camera (exactly at it you'd be inside the object and see nothing)
+        Transform view = CameraManager.Instance != null && CameraManager.Instance.Camera != null ? CameraManager.Instance.Camera.transform
+            : GorillaTagger.Instance != null && GorillaTagger.Instance.headCollider != null ? GorillaTagger.Instance.headCollider.transform : null;
+        float size = sel.MeshFilter != null && sel.MeshFilter.sharedMesh != null
+            ? sel.MeshFilter.sharedMesh.bounds.size.magnitude * sel.GameObject.transform.lossyScale.x : 1f;
+        Vector3 camPos = view != null ? view.position + view.forward * Mathf.Clamp(size * 1.2f + 0.6f, 1.2f, 30f) : Vector3.zero;
 
         sel.GameObject.transform.position = camPos;
         if (sel.Data != null)
@@ -433,7 +465,7 @@ public class ObjectManager : MonoBehaviour
             sel.Data.Position = camPos;
         }
 
-        UIManager.Instance.Status = $"Moved '{sel.Data?.ObjectName ?? "object"}' to camera position.";
+        UIManager.Instance.Status = $"Moved '{sel.Data?.ObjectName ?? "object"}' in front of the camera.";
     }
 
     public void SyncWithProject()
@@ -476,7 +508,8 @@ public class ObjectManager : MonoBehaviour
             SyncWithProject();
         }
 
-        if (CameraManager.Instance != null && CameraManager.Instance.InPlayback)
+        // only while the MonkeFrames editor is open (not while playing normally) and not during playback
+        if (CameraManager.Instance == null || CameraManager.Instance.CinemachineState || CameraManager.Instance.InPlayback)
             return;
 
         if (GUIUtility.keyboardControl != 0)

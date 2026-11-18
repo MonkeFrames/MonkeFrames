@@ -2,6 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using MonkeFrames.Editor.Components;
+using MonkeFrames.Editor.Utilities;
+using UnityEngine;
 
 namespace MonkeFrames.Editor;
 

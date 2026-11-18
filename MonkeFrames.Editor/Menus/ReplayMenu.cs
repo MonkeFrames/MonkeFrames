@@ -8,7 +8,7 @@ namespace MonkeFrames.Editor.Menus;
 public class ReplayMenu : IEditorMenu
 {
     public string Name => "Replay";
-    public int Index => 6;
+    public int Index => 8;
 
     [EditorMenuItem("Open Replays")]
     public void Open() => UIManager.Instance.OpenWindow("Replays");

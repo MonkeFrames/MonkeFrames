@@ -7,12 +7,18 @@ namespace MonkeFrames.Editor.Menus;
 public class WindowMenu : IEditorMenu
 {
     public string Name => "Window";
-    public int Index => 3;
+    public int Index => 5;
 
     [EditorMenuItem("Keyframe Editor")]
     public void KeyframeManager()
     {
         UIManager.Instance.ToggleWindow("Keyframe Editor");
+    }
+
+    [EditorMenuItem("Advanced Keyframe Editor (BETA)")]
+    public void AdvancedKeyframeEditor()
+    {
+        UIManager.Instance.ToggleWindow("Advanced Keyframe Editor (BETA)");
     }
 
     [EditorMenuItem("Room Manager")]

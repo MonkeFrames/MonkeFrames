@@ -50,10 +50,12 @@ public class MotionBlurController : MonoBehaviour
 
     /// <summary>The finished blurred / depth-of-field image for this frame (if any).</summary>
     public bool HaveFrame => _haveFrame;
+    /// <summary>What the keyframes / camera mode asked for (used by the photoreal graphics' own blur).</summary>
+    public bool Requested => _enabled;
+    public float RequestedStrength => _strength;
+    public Transform Anchor => _anchor;
     public RenderTexture Accum => _accum;
 
-    /// <summary>Focus distance actually used this frame (for the Post Processing window).</summary>
-    public float CurrentFocus { get; private set; } = 3f;
 
     /// <summary>Request blur on or off with a strength 0..1.</summary>
     /// <param name="anchor">Optional object that moves with the camera (the watched gorilla); it is kept sharp.</param>
@@ -127,17 +129,10 @@ public class MotionBlurController : MonoBehaviour
             && Vector3.Distance(_anchorPrevPos, anchorCur) < MaxBlurDistance;
         Vector3 anchorDelta = anchorValid ? _anchorPrevPos - anchorCur : Vector3.zero; // towards last frame
 
-        // Post Processing window: global motion blur + depth of field.
-        Settings st = Settings.current;
-        bool globalBlur = st != null && st.GlobalMotionBlur;
-        bool dof = st != null && st.DepthOfField;
-        bool blurOn = _enabled || globalBlur;
-        float strength = globalBlur ? Mathf.Max(_enabled ? _strength : 0f, st.GlobalMotionBlurStrength) : _strength;
+        bool blurOn = _enabled;
+        float strength = _strength;
 
-        if (dof)
-            CurrentFocus = UpdateFocus(cam, curPos, curRot, st);
-
-        if ((blurOn || dof) && !_failed && (_hasPrevPose || dof))
+        if (blurOn && !_failed && _hasPrevPose)
         {
             float moved = _hasPrevPose ? Vector3.Distance(_prevPos, curPos) : 0f;
             float turned = _hasPrevPose ? Quaternion.Angle(_prevRot, curRot) : 0f;
@@ -145,12 +140,16 @@ public class MotionBlurController : MonoBehaviour
             bool isMoving = _hasPrevPose && (moved > 0.0005f || turned > 0.02f || Mathf.Abs(curFov - _prevFov) > 0.01f);
             bool motion = blurOn && isMoving && !isCut;
 
-            if (motion || dof)
+            // Photoreal (the graphics mod) blurs the finished image itself (stable, far cheaper than re-rendering)
+            if (PhotorealLink.Active && PhotorealLink.PostBlur)
+                motion = false;
+
+            if (motion)
             {
                 try
                 {
                     RenderBlur(cam, curPos, curRot, curFov, anchorValid && motion ? anchor : null, anchorCur, anchorDelta,
-                        motion ? strength : -1f, dof ? st : null);
+                        strength);
                 }
                 catch (System.Exception ex)
                 {
@@ -178,34 +177,8 @@ public class MotionBlurController : MonoBehaviour
         _anchorPrevPos = anchorCur;
     }
 
-    private float _smoothFocus = -1f;
-
-    /// <summary>Auto focus: the gorilla an Other Camera is filming, else whatever is in the middle of the view.</summary>
-    private float UpdateFocus(Camera cam, Vector3 pos, Quaternion rot, Settings st)
-    {
-        float want = st.DofFocus;
-        if (st.DofAutoFocus)
-        {
-            CameraModes cm = CameraModes.Instance;
-            if (cm != null && cm.Mode != CameraMode.Free && cm.Target != null && cm.Target.Available && cm.Mode != CameraMode.FirstPerson)
-                want = Vector3.Distance(pos, cm.Target.Head.position);
-            else if (Physics.Raycast(pos + rot * Vector3.forward * 0.05f, rot * Vector3.forward, out RaycastHit hit, 200f, ~0, QueryTriggerInteraction.Ignore))
-                want = hit.distance + 0.05f;
-            else
-                want = 50f;
-        }
-        want = Mathf.Clamp(want, 0.2f, 200f);
-
-        if (_smoothFocus < 0f) _smoothFocus = want;
-        // Glide focus changes like a real focus puller (in log space so near/far feel even).
-        float speed = Mathf.Lerp(1.2f, 20f, Mathf.Clamp01(st.DofFocusSpeed));
-        float k = 1f - Mathf.Exp(-speed * Mathf.Max(Time.unscaledDeltaTime, 0.0001f));
-        _smoothFocus = Mathf.Exp(Mathf.Lerp(Mathf.Log(_smoothFocus), Mathf.Log(want), k));
-        return _smoothFocus;
-    }
-
     private void RenderBlur(Camera cam, Vector3 curPos, Quaternion curRot, float curFov,
-        Transform anchor, Vector3 anchorCur, Vector3 anchorDelta, float motionStrength, Settings dof)
+        Transform anchor, Vector3 anchorCur, Vector3 anchorDelta, float motionStrength)
     {
         // Render at the size of the camera's on-screen area (the whole screen, or the Replay
         // Studio viewport), with a full-texture rect so the framing matches exactly.
@@ -218,18 +191,12 @@ public class MotionBlurController : MonoBehaviour
 
         bool exporting = CameraManager.Instance.doRecording;
         bool motion = motionStrength >= 0f;
-        int preview = Settings.current != null ? Mathf.Clamp(Settings.current.MotionBlurSamples, 2, 32) : PreviewSamples;
+        int preview = PreviewSamples;
         int samples = motion ? (exporting ? Mathf.Max(ExportSamples, preview * 2) : preview) : 1;
-        if (dof != null)
-            samples = Mathf.Max(samples, Mathf.Clamp(exporting ? dof.DofSamples * 2 : dof.DofSamples, 4, 48));
 
         // Shutter: fraction of this frame's movement that is blurred (trailing behind the camera).
         float shutter = motion ? Mathf.Lerp(0.25f, 1f, motionStrength) : 0f;
 
-        // Depth of field: the lens is a disc; every sample looks at the same focus point from a
-        // different spot on that disc, so only things at the focus distance stay sharp.
-        float aperture = dof != null ? Mathf.Lerp(0.004f, 0.09f, Mathf.Clamp01(dof.DofAperture)) : 0f;
-        float focus = CurrentFocus;
 
         RenderTexture oldTarget = cam.targetTexture;
         Transform tr = cam.transform;
@@ -246,15 +213,6 @@ public class MotionBlurController : MonoBehaviour
 
                 Vector3 sp = Vector3.LerpUnclamped(curPos, _prevPos, back);
                 Quaternion sr = Quaternion.SlerpUnclamped(curRot, _prevRot, back);
-                if (aperture > 0f)
-                {
-                    // Even spread over the lens disc (golden-angle spiral).
-                    float r = Mathf.Sqrt((s + 0.5f) / samples) * aperture;
-                    float a = s * 2.39996323f;
-                    Vector3 focusPoint = sp + sr * Vector3.forward * focus;
-                    sp += sr * new Vector3(Mathf.Cos(a) * r, Mathf.Sin(a) * r, 0f);
-                    sr = Quaternion.LookRotation(focusPoint - sp, sr * Vector3.up);
-                }
                 tr.SetPositionAndRotation(sp, sr);
                 cam.fieldOfView = Mathf.Clamp(Mathf.LerpUnclamped(curFov, _prevFov, back), 1f, 179f);
 
@@ -327,8 +285,8 @@ public class MotionBlurController : MonoBehaviour
 
         if (!_haveFrame || _accum == null || Event.current.type != EventType.Repaint)
             return;
-        // Post Processing draws the final image itself (with this blur as its input).
-        if (PostFX.Instance != null && PostFX.Instance.Capturing)
+        // Photoreal (the graphics mod) draws the final image itself (with this blur as its input).
+        if (PhotorealLink.Active)
             return;
 
         Color prev = GUI.color;

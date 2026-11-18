@@ -1,3 +1,4 @@
+using MonkeFrames.Editor.Classes;
 using System.Collections;
 using System.IO;
 using MonkeFrames.Editor.Components;
@@ -192,6 +193,38 @@ public class Player : IEditorWindow
         _LastHeadPosition = HeadPosition;
     }
 
+    /// <summary>The project's music, once loaded (for waveforms).</summary>
+    public static AudioClip LoadedClip => _loadedClip;
+
+    /// <summary>Load the project's music if it isn't loaded yet.</summary>
+    public void EnsureAudio()
+    {
+        if (Project != null && Project.AudioPath != _loadedPath && !_isLoadingAudio)
+            LoadAudio(Project.AudioPath);
+    }
+
+    /// <summary>Play / pause / seek the project's music for another editor's playhead (seconds into the animation).</summary>
+    public static void PreviewAudio(bool playing, float seconds, bool seek)
+    {
+        if (_audioSource == null || _loadedClip == null) return;
+        float target = (KeyframeManager.Instance?.Project?.AudioStartTime ?? 0f) + seconds;
+        _audioSource.volume = _volume;
+        bool inside = target >= 0f && target < _loadedClip.length;
+        if (playing && inside)
+        {
+            if (!_audioSource.isPlaying || seek || Mathf.Abs(_audioSource.time - target) > 0.1f)
+            {
+                _audioSource.time = target;
+                if (!_audioSource.isPlaying) _audioSource.Play();
+            }
+        }
+        else
+        {
+            if (_audioSource.isPlaying) _audioSource.Pause();
+            if (seek && inside) _audioSource.time = target;
+        }
+    }
+
     public static string FormatTime(float seconds)
     {
         if (seconds < 0f) seconds = 0f;
@@ -286,6 +319,8 @@ public class Player : IEditorWindow
     private void SyncAudio(bool forceSeek = false)
     {
         if (_audioSource == null || _loadedClip == null) return;
+        // the Advanced Keyframe Editor is playing the music: leave it alone
+        if (AdvancedKeyframeEditor.PlayingPreview) return;
 
         _audioSource.volume = _volume;
 
@@ -322,13 +357,17 @@ public class Player : IEditorWindow
 
     private int _lastHash;
 
-    private int ProjectHash()
+    private int ProjectHash() => Project.AnimationHash();
+
+    private int OldProjectHash()
     {
         unchecked
         {
             int h = 17;
             h = h * 31 + Project.FPS;
             h = h * 31 + Project.Smoothness.GetHashCode();
+            h = h * 31 + (Project.AutoSmooth ? 1 : 0);
+            h = h * 31 + Project.AutoSmoothStrength.GetHashCode();
             foreach (var k in Project.Keyframes)
             {
                 h = h * 31 + k.Position.GetHashCode();
@@ -338,6 +377,7 @@ public class Player : IEditorWindow
                 h = h * 31 + k.Transition.Duration.GetHashCode();
                 h = h * 31 + (k.MotionBlur ? 1 : 0);
                 h = h * 31 + k.MotionBlurStrength.GetHashCode();
+                h = h * 31 + k.TimeOfDay.GetHashCode();
                 h = h * 31 + k.Transition.CurveX1.GetHashCode() ^ k.Transition.CurveY1.GetHashCode();
                 h = h * 31 + k.Transition.CurveX2.GetHashCode() ^ k.Transition.CurveY2.GetHashCode();
                 h = h * 31 + (k.Transition.CustomSpeed ? 1 : 0);
@@ -355,6 +395,7 @@ public class Player : IEditorWindow
         CameraManager.Instance.Position = f.Position;
         CameraManager.Instance.Rotation = f.QuatRotation;
         CameraManager.Instance.FieldOfView = f.FieldOfView;
+        PhotorealLink.KeyframeHour = f.TimeOfDay;
     }
 
     public void OnClose()

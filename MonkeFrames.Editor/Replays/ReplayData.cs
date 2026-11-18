@@ -13,6 +13,19 @@ public sealed class AudioBlock
     public short[] Samples;
 }
 
+/// <summary>From local track frame <see cref="Frame"/> on, the gorilla's body uses material index <see cref="Index"/> (VRRig.setMatIndex).</summary>
+public readonly struct MatChange
+{
+    public readonly int Frame;
+    public readonly int Index;
+
+    public MatChange(int frame, int index)
+    {
+        Frame = frame;
+        Index = index;
+    }
+}
+
 /// <summary>
 /// One recorded replay: every gorilla's movement (and voice) over time.
 /// Movement is sampled at <see cref="Rate"/> frames per second and interpolated on playback.
@@ -20,13 +33,17 @@ public sealed class AudioBlock
 public sealed class ReplayClip
 {
     public const int Magic = 0x5052464D; // "MFRP"
-    public const int FileVersion = 4;   // 4: fur appearance and anatomical eye pose
+    public const int FileVersion = 7;   // 2: spectator cameras, 3: stored cosmetics (looks), 4: recorded cosmetic IDs, 5: fur + eye pose,
+                                        // 6: game mode + tagged / game-mode body material timeline,
+                                        // 7: item events (holdables / cosmetics changing size or switching on / off)
 
     public string Name = "Replay";
     public DateTime Created = DateTime.Now;
     public int Rate = 60;
     public int FrameCount;
     public string Where = "";
+    /// <summary>Game mode(s) the room was in while recording, e.g. "Infection" or "Casual / Infection". Empty if unknown / older replay.</summary>
+    public string GameMode = "";
 
     // Trim (seconds). OutPoint <= 0 means "to the end".
     public float InPoint;
@@ -36,6 +53,9 @@ public sealed class ReplayClip
 
     /// <summary>MonkeFrames spectator cameras (yours and other mod users') during the recording.</summary>
     public readonly List<CamTrack> Cameras = new();
+
+    /// <summary>Stored meshes / materials of every gorilla's cosmetics (made just before saving).</summary>
+    public LookBank Looks;
 
     /// <summary>File this replay was loaded from / saved to (null if never saved).</summary>
     public string FilePath;
@@ -75,6 +95,9 @@ public sealed class ReplayClip
             w.Write(Cameras.Count);
             foreach (CamTrack c in Cameras)
                 c.Write(w);
+
+            w.Write(Looks != null);
+            Looks?.Write(w);
         }
 
         if (File.Exists(path))
@@ -94,10 +117,31 @@ public sealed class ReplayClip
         w.Write(InPoint);
         w.Write(OutPoint);
         w.Write(Tracks.Count);
+        w.Write(GameMode ?? "");    // 6
     }
 
     /// <summary>Read a replay file. With headerOnly, tracks are skipped (fast, for the library list).</summary>
+    /// <summary>
+    /// How a file is laid out. Official MonkeFrames builds used the same version numbers for different data:
+    /// their version 3 stores cosmetic IDs (no stored looks), their version 4 also stores fur + eye pose.
+    /// </summary>
+    private enum Layout { Native, OfficialV3, OfficialV4 }
+
     public static ReplayClip Load(string path, bool headerOnly = false)
+    {
+        int version = 0;
+        try
+        {
+            return Load(path, headerOnly, Layout.Native, ref version);
+        }
+        catch (Exception) when ((version == 3 || version == 4) && !headerOnly)
+        {
+            // A replay saved by an official MonkeFrames build: read it their way.
+            return Load(path, headerOnly, version == 3 ? Layout.OfficialV3 : Layout.OfficialV4, ref version);
+        }
+    }
+
+    private static ReplayClip Load(string path, bool headerOnly, Layout layout, ref int version)
     {
         using FileStream fs = File.OpenRead(path);
         using GZipStream gz = new GZipStream(fs, CompressionMode.Decompress);
@@ -105,7 +149,7 @@ public sealed class ReplayClip
 
         if (r.ReadInt32() != Magic)
             throw new InvalidDataException("Not a MonkeFrames replay");
-        int version = r.ReadInt32();
+        version = r.ReadInt32();
         if (version > FileVersion)
             throw new InvalidDataException("This replay was made by a newer MonkeFrames");
 
@@ -123,17 +167,38 @@ public sealed class ReplayClip
         int tracks = r.ReadInt32();
         c._headerTrackCount = tracks;
 
+        bool official = layout != Layout.Native;
+        bool gameMode = !official && version >= 6;
+        if (gameMode)
+            c.GameMode = r.ReadString();
+
         if (headerOnly)
             return c;
 
+        bool cosmeticIds = version >= 4 || official;
+        bool furAndEyes = layout == Layout.OfficialV4 || (!official && version >= 5);
         for (int i = 0; i < tracks; i++)
-            c.Tracks.Add(ReplayTrack.Read(r, version));
+            c.Tracks.Add(ReplayTrack.Read(r, version, cosmeticIds, furAndEyes, gameMode, gameMode && version >= 7));
 
         if (version >= 2)
         {
             int cams = r.ReadInt32();
             for (int i = 0; i < cams; i++)
                 c.Cameras.Add(CamTrack.Read(r));
+        }
+
+        if (version >= 3 && !official)
+        {
+            try
+            {
+                if (r.ReadBoolean())
+                    c.Looks = LookBank.Read(r);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MonkeFrames::Replay] Stored cosmetics couldn't be read: {ex.Message}");
+                c.Looks = null;
+            }
         }
 
         return c;
@@ -161,16 +226,26 @@ public sealed class ReplayTrack
     /// <summary>Visible meshes at the time of recording (used to rebuild the gorilla after loading).</summary>
     public string[] RendererPaths = Array.Empty<string>();
     public string[] CosmeticIds = Array.Empty<string>();
-    public string FurAppearance = "";
-    public bool HasEyePose;
-    public Vector3 EyeLocalPosition;
-    public Quaternion EyeLocalRotation = Quaternion.identity;
     /// <summary>Cosmetic ID for each RendererPaths entry, empty for non-cosmetic renderers.</summary>
     public string[] RendererCosmeticIds = Array.Empty<string>();
     public string HeadPath = "", LeftHandPath = "", RightHandPath = "", MainSkinPath = "";
 
+    /// <summary>The gorilla's fur / body material and skeleton (ReplayFur), as JSON. Empty in older replays.</summary>
+    public string FurAppearance = "";
+    /// <summary>Where the player's eyes were relative to the head bone (official builds' first person uses it;
+    /// kept so files stay compatible).</summary>
+    public bool HasEyePose;
+    public Vector3 EyeLocalPosition;
+    public Quaternion EyeLocalRotation = Quaternion.identity;
+    /// <summary>Items changing size / switching on and off (holdables, interactive cosmetics).</summary>
+    public ReplayEvents Events = new();
+
     public int StartFrame;
     public int FrameCount;
+
+    /// <summary>When the gorilla's body material (VRRig.setMatIndex: tagged / infected / lava / team look) changed.
+    /// Frames are local to the track (0 = StartFrame). Index 0 = normal fur; before the first change it's 0.</summary>
+    public readonly List<MatChange> MatChanges = new();
 
     private byte[] _data = new byte[4096];
     private int _len;
@@ -187,6 +262,7 @@ public sealed class ReplayTrack
     // Runtime only
     [NonSerialized] public ReplayPuppet Puppet;
     [NonSerialized] public VoicePlayer Voice;
+    [NonSerialized] internal ReplayGameMode.BodyState Body;
 
     public int FrameSize => RootBytes + Paths.Length * BoneBytes;
     public int EndFrame => StartFrame + FrameCount;   // exclusive
@@ -241,6 +317,36 @@ public sealed class ReplayTrack
     {
         if (_data.Length != _len)
             Array.Resize(ref _data, _len);
+    }
+
+    /// <summary>Note the body material index for the frame about to be appended (only stored when it changes).</summary>
+    public void NoteMaterial(int index)
+    {
+        int n = MatChanges.Count;
+        if (index == (n > 0 ? MatChanges[n - 1].Index : 0))
+            return;
+        if (n > 0 && MatChanges[n - 1].Frame >= FrameCount)
+        {
+            // Changed again within the same frame: keep only the latest.
+            MatChanges.RemoveAt(--n);
+            if (index == (n > 0 ? MatChanges[n - 1].Index : 0))
+                return;
+        }
+        MatChanges.Add(new MatChange(FrameCount, index));
+    }
+
+    /// <summary>Body material index at local frame f.</summary>
+    public int MaterialAt(float f)
+    {
+        int lo = 0, hi = MatChanges.Count - 1, found = -1;
+        int frame = Mathf.FloorToInt(f + 0.001f);
+        while (lo <= hi)
+        {
+            int mid = (lo + hi) >> 1;
+            if (MatChanges[mid].Frame <= frame) { found = mid; lo = mid + 1; }
+            else hi = mid - 1;
+        }
+        return found < 0 ? 0 : MatChanges[found].Index;
     }
 
     // ---------------- Playback ----------------
@@ -406,9 +512,20 @@ public sealed class ReplayTrack
         w.Write(Hidden);
         w.Write(VoiceMuted);
         w.Write(VoiceVolume);
+
+        // 6: body material timeline
+        w.Write(MatChanges.Count);
+        foreach (MatChange m in MatChanges)
+        {
+            w.Write(m.Frame);
+            w.Write((short)m.Index);
+        }
+
+        // 7: item events
+        Events.Write(w);
     }
 
-    public static ReplayTrack Read(BinaryReader r, int version)
+    public static ReplayTrack Read(BinaryReader r, int version, bool cosmeticIds, bool furAndEyes, bool matChanges = false, bool itemEvents = false)
     {
         ReplayTrack t = new ReplayTrack
         {
@@ -426,18 +543,19 @@ public sealed class ReplayTrack
             FrameCount = r.ReadInt32(),
         };
 
-        if (version >= 3)
+        if (cosmeticIds)
         {
             t.CosmeticIds = ReadStrings(r);
             t.RendererCosmeticIds = ReadStrings(r);
         }
-
-        if (version >= 4)
+        if (furAndEyes)
         {
-            t.FurAppearance = r.ReadString(); t.HasEyePose = r.ReadBoolean();
+            t.FurAppearance = r.ReadString();
+            t.HasEyePose = r.ReadBoolean();
             t.EyeLocalPosition = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
             t.EyeLocalRotation = new Quaternion(r.ReadSingle(), r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
         }
+
         t._len = r.ReadInt32();
         if (t._len < 0 || t.FrameCount < 0 || t._len != t.FrameCount * t.FrameSize)
             throw new InvalidDataException($"Replay data for {t.Name} doesn't match its size");
@@ -460,6 +578,24 @@ public sealed class ReplayTrack
         t.Hidden = r.ReadBoolean();
         t.VoiceMuted = r.ReadBoolean();
         t.VoiceVolume = r.ReadSingle();
+
+        if (matChanges)
+        {
+            int n = r.ReadInt32();
+            if (n < 0 || n > 10_000_000)
+                throw new InvalidDataException($"Bad material timeline for {t.Name}");
+            int last = int.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                int frame = r.ReadInt32();
+                int index = r.ReadInt16();
+                if (frame < last) continue;   // keep it sorted for the lookup
+                last = frame;
+                t.MatChanges.Add(new MatChange(frame, index));
+            }
+        }
+        if (itemEvents)
+            t.Events = ReplayEvents.Read(r);
         return t;
     }
 

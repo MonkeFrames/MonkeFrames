@@ -7,7 +7,7 @@ namespace MonkeFrames.Compiler.Models;
 /// <summary>
 /// Represents many properties of a point on the animation, such as positional, rotational, and transitional data.
 /// </summary>
-public struct Keyframe : IEquatable<Keyframe>
+public struct Keyframe
 {
     /// <summary>
     /// The position of the keyframe.
@@ -38,7 +38,41 @@ public struct Keyframe : IEquatable<Keyframe>
     /// Motion blur strength (0 = subtle, 1 = heavy). Only used when <see cref="MotionBlur"/> is on.
     /// </summary>
     public float MotionBlurStrength = 0.5f;
-    
+
+    /// <summary>
+    /// Time of day (hours, 0-24) for the photoreal sky at this keyframe; blends to the next keyframe's time along
+    /// the transition. -1 = not set (the Graphics window's time is used).
+    /// </summary>
+    public float TimeOfDay = -1f;
+
+    /// <summary>
+    /// Which properties have a keyframe here (Advanced Keyframe Editor). A property that isn't keyed glides
+    /// straight through this keyframe from its previous keyframe to its next one, so each property can have
+    /// keyframes at its own times. Normal keyframes key everything.
+    /// </summary>
+    public KeyLanes Keys = KeyLanes.All;
+
+    /// <summary>`true` if <paramref name="lane"/> has a keyframe here.</summary>
+    public readonly bool Has(KeyLanes lane) => (Keys & lane) != 0;
+
+    /// <summary>A number that changes whenever anything that affects the compiled animation changes.</summary>
+    public readonly int AnimationHash()
+    {
+        unchecked
+        {
+            int h = 17;
+            h = h * 31 + Position.GetHashCode();
+            h = h * 31 + Rotation.GetHashCode();
+            h = h * 31 + FieldOfView.GetHashCode();
+            h = h * 31 + (MotionBlur ? 1 : 0);
+            h = h * 31 + MotionBlurStrength.GetHashCode();
+            h = h * 31 + TimeOfDay.GetHashCode();
+            h = h * 31 + (int)Keys;
+            h = h * 31 + Transition.AnimationHash();
+            return h;
+        }
+    }
+
     /// <summary>
     /// The keyframe's GUID, used for equating keyframes to each other efficiently.
     /// </summary>
@@ -88,11 +122,11 @@ public struct Keyframe : IEquatable<Keyframe>
         if (obj is not Keyframe other)
             return false;
 
-        return Equals(other);
-    }
+        if (ReferenceEquals(this, other))
+            return true;
 
-    /// <summary>Compare the stable identity rather than editable properties.</summary>
-    public readonly bool Equals(Keyframe other) => GUID == other.GUID;
+        return this.GUID == other.GUID;
+    }
     
     /// <summary>
     /// Returns the hash code for this instance.
@@ -100,11 +134,12 @@ public struct Keyframe : IEquatable<Keyframe>
     /// <returns>A 32-bit signed integer that is the hash code of this instance.</returns>
     public override readonly int GetHashCode()
     {
-        return GUID?.GetHashCode() ?? 0;
+        return base.GetHashCode();
     }
 
     /// <summary>
     /// Create a new Keyframe.
     /// </summary>
+    [Newtonsoft.Json.JsonConstructor]
     public Keyframe() { }
 }

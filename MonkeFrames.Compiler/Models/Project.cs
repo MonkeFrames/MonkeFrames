@@ -77,6 +77,52 @@ public class Project
     public float AudioStartTime { get; set; }
 
     /// <summary>
+    /// Auto smooth: the camera follows a smooth curve through all keyframes instead of straight lines with corners,
+    /// and its turning and zoom are smoothed the same way - while every transition keeps its own timing exactly
+    /// (its effect or custom speed graph decides how far along the curve the camera is), and every keyframe is hit
+    /// exactly.
+    /// </summary>
+    public bool AutoSmooth { get; set; } = false;
+
+    /// <summary>
+    /// How strong <see cref="AutoSmooth"/> is: 0 = just rounds off the corners at keyframes, 1 = wide, sweeping curves.
+    /// </summary>
+    public float AutoSmoothStrength
+    {
+        get => field;
+        set => field = Math.Clamp(value, 0f, 1f);
+    } = 0.7f;
+
+    /// <summary>
+    /// Handheld camera shake on top of the animation (After Effects' wiggle()).
+    /// </summary>
+    public Wiggle Wiggle { get; set; } = new Wiggle();
+
+    /// <summary>A number that changes whenever anything that affects the compiled animation changes.</summary>
+    public int AnimationHash()
+    {
+        unchecked
+        {
+            int h = 17;
+            h = h * 31 + FPS;
+            h = h * 31 + Smoothness.GetHashCode();
+            h = h * 31 + (AutoSmooth ? 1 : 0);
+            h = h * 31 + AutoSmoothStrength.GetHashCode();
+            Wiggle w = Wiggle;
+            h = h * 31 + (w.Enabled ? 1 : 0);
+            h = h * 31 + w.Frequency.GetHashCode();
+            h = h * 31 + w.Position.GetHashCode();
+            h = h * 31 + w.Rotation.GetHashCode();
+            h = h * 31 + w.Zoom.GetHashCode();
+            h = h * 31 + w.Seed;
+            if (Keyframes != null)
+                foreach (Keyframe k in Keyframes)
+                    h = h * 31 + k.AnimationHash();
+            return h;
+        }
+    }
+
+    /// <summary>
     /// A list of built keyframes for the project for use with cameras.
     /// </summary>
     [JsonIgnore]
